@@ -112,8 +112,11 @@ public class Conveyor extends Block{
         Tile facing = tile.facing();
         //find block of same type that this is facing, add if necessary and stop
         if(facing != null && facing.block() == this){
-            facing.<ConveyorEntity>entity().line.add(tile);
-            return;
+            ConveyorEntity oe = facing.entity();
+            if(oe.line.beginsWith(facing)){
+                oe.line.add(tile);
+                return;
+            }
         }
 
         //find conveyors facing this block, get first one and add it
