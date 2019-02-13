@@ -3,6 +3,7 @@ package io.anuke.mindustry.world.blocks.distribution;
 import io.anuke.annotations.Annotations.Struct;
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.IntArray;
+import io.anuke.arc.util.Log;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.distribution.Conveyor.ConveyorEntity;
 
@@ -26,6 +27,8 @@ public class ConveyorLine{
         this.seed.entity.add();
         this.id = lastID++;
         this.speed = ((Conveyor)seed.block()).speed;
+        this.seed.<ConveyorEntity>entity().line = this;
+        this.tiles.add(seed);
     }
 
     /**adds a tile to this line.
@@ -34,7 +37,8 @@ public class ConveyorLine{
      * 2) a tile in this line is facing this tile
      */
     public void add(Tile tile){
-
+        tile.<ConveyorEntity>entity().line = this;
+        tiles.add(tile);
         //backflow, find what's facing this tile
         //it doesn't really matter what *this* tile is facing, because it can't be a different line; facing takes priority
         for(Tile near : tile.entity.proximity()){

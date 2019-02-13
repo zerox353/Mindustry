@@ -59,8 +59,6 @@ public class Conveyor extends Block{
         int frame = entity.clogHeat <= 0.5f ? (int) (((Time.time() * speed * 8f * entity.timeScale)) % 4) : 0;
         Draw.rect(regions[Mathf.clamp(entity.blendbits, 0, regions.length - 1)][Mathf.clamp(frame, 0, regions[0].length - 1)], tile.drawx(), tile.drawy(),
             tilesize * entity.blendsclx, tilesize * entity.blendscly,  rotation*90);
-
-        Core.scene.skin.getFont("default-font").draw(entity.line.id + "", tile.drawx(), tile.drawy());
     }
 
     @Override
@@ -103,7 +101,10 @@ public class Conveyor extends Block{
 
     @Override
     public void drawLayer(Tile tile){
-
+        ConveyorEntity entity = tile.entity();
+        Core.scene.skin.getFont("default-font").getData().setScale(0.25f);
+        Core.scene.skin.getFont("default-font").draw(entity.line.id + "", tile.drawx(), tile.drawy());
+        Core.scene.skin.getFont("default-font").getData().setScale(1f);
     }
 
     @Override

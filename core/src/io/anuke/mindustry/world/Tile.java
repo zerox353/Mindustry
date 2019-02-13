@@ -297,7 +297,7 @@ public class Tile implements Position, TargetTrait{
     }
 
     public Tile facing(){
-        return world.tile(rotation);
+        return getNearby(rotation);
     }
 
     public Tile getNearby(Point2 relative){
