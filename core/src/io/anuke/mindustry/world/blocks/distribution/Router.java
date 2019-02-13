@@ -29,7 +29,7 @@ public class Router extends Block{
             entity.items.clear();
         }
 
-        if(entity.lastItem != null){
+        if(entity.lastItem != null && entity.items.has(entity.lastItem)){
             entity.time += 1f/speed * Time.delta();
             Tile target = getTileTarget(tile, entity.lastItem, entity.lastInput, false);
 
@@ -39,6 +39,8 @@ public class Router extends Block{
                 entity.items.remove(entity.lastItem, 1);
                 entity.lastItem = null;
             }
+        }else{
+            entity.lastInput = null;
         }
     }
 
@@ -70,16 +72,6 @@ public class Router extends Block{
             }
         }
         return null;
-    }
-
-    @Override
-    public int removeStack(Tile tile, Item item, int amount){
-        SplitterEntity entity = tile.entity();
-        int result = super.removeStack(tile, item, amount);
-        if(result != 0 && item == entity.lastItem){
-            entity.lastItem = null;
-        }
-        return result;
     }
 
     @Override

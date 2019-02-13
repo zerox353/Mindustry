@@ -260,7 +260,7 @@ public interface BuilderTrait extends Entity, TeamTrait{
 
             if(Mathf.chance(Time.delta() * (0.06 - item.hardness * 0.01) * getMinePower())){
 
-                if(unit.dst(core) < mineTransferRange && core.tile.block().acceptStack(item, 1, core.tile, unit) == 1){
+                if(unit.dst(core) < mineTransferRange && core.tile.block().acceptItem(item, core.tile)){
                     Call.transferItemTo(item, 1,
                         tile.worldx() + Mathf.range(tilesize / 2f),
                         tile.worldy() + Mathf.range(tilesize / 2f), core.tile);

@@ -3,7 +3,6 @@ package io.anuke.mindustry.input;
 import io.anuke.annotations.Annotations.Loc;
 import io.anuke.annotations.Annotations.Remote;
 import io.anuke.arc.Core;
-import io.anuke.mindustry.entities.Effects;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.input.InputProcessor;
 import io.anuke.arc.math.Angles;
@@ -13,14 +12,14 @@ import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.content.Blocks;
 import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.type.Player;
+import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.effect.ItemTransfer;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
+import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.game.Team;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.net.ValidateException;
-import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.ItemStack;
 import io.anuke.mindustry.ui.fragments.OverlayFragment;
 import io.anuke.mindustry.world.Block;
@@ -276,7 +275,7 @@ public abstract class InputHandler implements InputProcessor{
 
         ItemStack stack = player.item();
 
-        if(tile.block().acceptItem(stack.item, tile) > 0 && tile.getTeam() == player.getTeam() && tile.block().hasItems){
+        if(tile.block().acceptItem(stack.item, tile) && tile.getTeam() == player.getTeam() && tile.block().hasItems){
             Call.transferInventory(player, tile);
         }else{
             Call.dropItem(player.angleTo(x, y));

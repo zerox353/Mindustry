@@ -220,10 +220,11 @@ public class BuildBlock extends Block{
                     int accumulated = (int)(accumulator[i]); //get amount
 
                     if(amount > 0 && accumulated > 0){ //if it's positive, add it to the core
-                        int accepting = core.tile.block().acceptStack(requirements[i].item, accumulated, core.tile, builder);
-                        core.tile.block().handleStack(requirements[i].item, accepting, core.tile, builder);
-
-                        accumulator[i] -= accepting;
+                        while(accumulated > 0 && core.tile.block().acceptItem(requirements[i].item, core.tile)){
+                            core.tile.block().acceptItem(requirements[i].item, core.tile);
+                            accumulated --;
+                            accumulator[i] --;
+                        }
                     }
                 }
             }

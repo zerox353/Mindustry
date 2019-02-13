@@ -5,7 +5,6 @@ import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.entities.bullet.BulletType;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.entities.type.Unit;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.ui.Bar;
@@ -48,30 +47,6 @@ public class ItemTurret extends CooledTurret{
 
         bars.add(new Bar("blocks.ammo", Pal.ammo, () -> (float)entity.totalAmmo / maxAmmo)).growX();
         bars.row();
-    }
-
-    @Override
-    public int acceptStack(Item item, int amount, Tile tile, Unit source){
-        TurretEntity entity = tile.entity();
-
-        BulletType type = ammo.get(item);
-
-        if(type == null) return 0;
-
-        return Math.min((int) ((maxAmmo - entity.totalAmmo) / ammo.get(item).ammoMultiplier), amount);
-    }
-
-    @Override
-    public void handleStack(Item item, int amount, Tile tile, Unit source){
-        for(int i = 0; i < amount; i++){
-            handleItem(item, tile, null);
-        }
-    }
-
-    //currently can't remove items from turrets.
-    @Override
-    public int removeStack(Tile tile, Item item, int amount){
-        return 0;
     }
 
     @Override

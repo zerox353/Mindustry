@@ -193,7 +193,7 @@ public class Drone extends FlyingUnit implements BuilderTrait{
             TileEntity tile = (TileEntity) target;
 
             if(dst(target) < type.range){
-                if(tile.tile.block().acceptStack(item.item, item.amount, tile.tile, Drone.this) == item.amount){
+                if(tile.tile.block().acceptItem(item.item, tile.tile)){
                     Call.transferItemTo(item.item, item.amount, x, y, tile.tile);
                     item.amount = 0;
                 }

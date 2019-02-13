@@ -46,9 +46,10 @@ public class BlockInventoryFragment extends Fragment{
 
     @Remote(called = Loc.server, targets = Loc.both, forward = true)
     public static void requestItem(Player player, Tile tile, Item item, int amount){
-        if(player == null || tile == null) return;
+        if(player == null || tile == null || tile.entity == null || tile.entity.items == null) return;
 
-        int removed = tile.block().removeStack(tile, item, amount);
+        int removed = Math.min(tile.entity.items.get(item), amount);
+        tile.entity.items.remove(item, removed);
 
         player.addItem(item, removed);
         for(int j = 0; j < Mathf.clamp(removed / 3, 1, 8); j++){
@@ -67,7 +68,7 @@ public class BlockInventoryFragment extends Fragment{
 
     public void showFor(Tile t){
         this.tile = t.target();
-        if(tile == null || tile.entity == null || !tile.block().isAccessible() || tile.entity.items.total() == 0)
+        if(tile == null || tile.entity == null || tile.entity.items.total() == 0)
             return;
         rebuild(true);
     }
@@ -91,7 +92,7 @@ public class BlockInventoryFragment extends Fragment{
         table.background("inventory");
         table.touchable(Touchable.enabled);
         table.update(() -> {
-            if(state.is(State.menu) || tile == null || tile.entity == null || !tile.block().isAccessible() || tile.entity.items.total() == 0){
+            if(state.is(State.menu) || tile == null || tile.entity == null || tile.entity.items.total() == 0){
                 hide();
             }else{
                 if(holding && lastItem != null){

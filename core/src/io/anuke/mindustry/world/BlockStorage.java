@@ -53,6 +53,14 @@ public abstract class BlockStorage extends UnlockableContent{
         return hasItems;
     }
 
+    public boolean acceptItem(Item item, Tile tile){
+        return acceptItem(item, tile, tile);
+    }
+
+    public void handleItem(Item item, Tile tile){
+        handleItem(item, tile, tile);
+    }
+
     public void handleItem(Item item, Tile tile, Tile source){
         tile.entity.items.add(item, 1);
     }

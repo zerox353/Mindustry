@@ -36,7 +36,6 @@ public class UnitDrops{
 
                 if(Mathf.chance(0.03)){
                     int amount = Mathf.random(20, 40);
-                    amount = core.tile.block().acceptStack(item, amount, core.tile, null);
                     if (amount > 0) Call.transferItemTo(item, amount, unit.x + Mathf.range(2f), unit.y + Mathf.range(2f), core.tile);
                 }
             }
