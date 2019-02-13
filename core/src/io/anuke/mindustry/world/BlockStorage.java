@@ -1,15 +1,13 @@
 package io.anuke.mindustry.world;
 
 import io.anuke.arc.collection.Array;
-import io.anuke.mindustry.entities.Effects;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Vector2;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.entities.type.Unit;
+import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.effect.Puddle;
+import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.game.UnlockableContent;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.Liquid;
@@ -47,43 +45,12 @@ public abstract class BlockStorage extends UnlockableContent{
         return 0f;
     }
 
-    /**Returns the amount of items this block can accept.*/
-    public int acceptStack(Item item, int amount, Tile tile, Unit source){
-        if(acceptItem(item, tile, tile) && hasItems && (source == null || source.getTeam() == tile.getTeam())){
-            return Math.min(getMaximumAccepted(tile, item) - tile.entity.items.get(item), amount);
-        }else{
-            return 0;
-        }
-    }
-
     public int getMaximumAccepted(Tile tile, Item item){
         return itemCapacity;
     }
 
-    /**Remove a stack from this inventory, and return the amount removed.*/
-    public int removeStack(Tile tile, Item item, int amount){
-        tile.entity.noSleep();
-        tile.entity.items.remove(item, amount);
-        return amount;
-    }
-
-    /**Handle a stack input.*/
-    public void handleStack(Item item, int amount, Tile tile, Unit source){
-        tile.entity.noSleep();
-        tile.entity.items.add(item, amount);
-    }
-
     public boolean outputsItems(){
         return hasItems;
-    }
-
-    /**Returns offset for stack placement.*/
-    public void getStackOffset(Item item, Tile tile, Vector2 trns){
-
-    }
-
-    public void onProximityUpdate(Tile tile){
-        if(tile.entity != null) tile.entity.noSleep();
     }
 
     public void handleItem(Item item, Tile tile, Tile source){
@@ -121,7 +88,6 @@ public abstract class BlockStorage extends UnlockableContent{
                 if(ofract < fract) tryMoveLiquid(tile, in, other, (fract - ofract) * liquidCapacity / 2f, liquid);
             }
         }
-
     }
 
     public boolean canDumpLiquid(Tile tile, Tile to, Liquid liquid){
@@ -262,16 +228,6 @@ public abstract class BlockStorage extends UnlockableContent{
     /** Used for dumping items.*/
     public boolean canDump(Tile tile, Tile to, Item item){
         return true;
-    }
-
-    /** Try offloading an item to a nearby container in its facing direction. Returns true if success.*/
-    public boolean offloadDir(Tile tile, Item item){
-        Tile other = tile.getNearby(tile.getRotation());
-        if(other != null && other.target().getTeamID() == tile.getTeamID() && other.block().acceptItem(item, other, tile)){
-            other.block().handleItem(item, other, tile);
-            return true;
-        }
-        return false;
     }
 
     /** Returns whether this block's inventory has space and is ready for production.*/

@@ -131,12 +131,20 @@ public class Block extends BlockStorage{
         return true;
     }
 
+    /**Called when any tile touching this tile changes. Multiblocks count.
+     * Also called when this block is first placed.*/
+    public void onProximityUpdate(Tile tile){
+        if(tile.entity != null) tile.entity.noSleep();
+    }
+
+    /**Called before this block is removed from the tile.*/
     public void onProximityRemoved(Tile tile){
         if(tile.entity.power != null){
             tile.block().powerGraphRemoved(tile);
         }
     }
 
+    /**Called after this block is set to the tile.*/
     public void onProximityAdded(Tile tile){
         if(tile.block().hasPower) tile.block().updatePowerGraph(tile);
     }
@@ -399,10 +407,6 @@ public class Block extends BlockStorage{
     }
 
     public void update(Tile tile){
-    }
-
-    public boolean isAccessible(){
-        return (hasItems && itemCapacity > 0);
     }
 
     /** Called after the block is destroyed and removed. */

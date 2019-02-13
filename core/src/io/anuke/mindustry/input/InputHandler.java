@@ -34,7 +34,6 @@ public abstract class InputHandler implements InputProcessor{
     final static float playerSelectRange = mobile ? 17f : 11f;
     /**Maximum line length.*/
     final static int maxLength = 100;
-    final static Vector2 stackTrns = new Vector2();
     /**Distance on the back from where items originate.*/
     final static float backTrns = 3f;
 
@@ -63,46 +62,26 @@ public abstract class InputHandler implements InputProcessor{
 
     @Remote(targets = Loc.both, forward = true, called = Loc.server)
     public static void transferInventory(Player player, Tile tile){
-        if(Net.server() && (player.item().amount <= 0 || player.isTransferring)){
-            throw new ValidateException(player, "Player cannot transfer an item.");
-        }
+        if(player == null || tile.entity == null || !tile.block().acceptItem(player.item().item, tile)) return;
 
-        if(player == null || tile.entity == null) return;
-
-        player.isTransferring = true;
-
-        Item item = player.item().item;
-        int amount = player.item().amount;
-        int accepted = tile.block().acceptStack(item, amount, tile, player);
-        player.item().amount -= accepted;
-
-        int sent = Mathf.clamp(accepted / 4, 1, 8);
-        int removed = accepted / sent;
-        int[] remaining = {accepted, accepted};
         Block block = tile.block();
+        ItemStack stack = player.item();
 
-        for(int i = 0; i < sent; i++){
-            boolean end = i == sent - 1;
-            Time.run(i * 3, () -> {
-                tile.block().getStackOffset(item, tile, stackTrns);
+        for(int i = 0; i < stack.amount; i++){
+            Time.run(i, () -> {
+                stack.amount --;
 
-                ItemTransfer.create(item,
-                        player.x + Angles.trnsx(player.rotation + 180f, backTrns), player.y + Angles.trnsy(player.rotation + 180f, backTrns),
-                        new Vector2(tile.drawx() + stackTrns.x, tile.drawy() + stackTrns.y), () -> {
-                            if(tile.block() != block || tile.entity == null || tile.entity.items == null) return;
+                if(tile.block().acceptItem(stack.item, tile)){
+                    ItemTransfer.create(stack.item,
+                    player.x + Angles.trnsx(player.rotation + 180f, backTrns), player.y + Angles.trnsy(player.rotation + 180f, backTrns),
+                    new Vector2(tile.drawx(), tile.drawy()), () -> {
+                        if(tile.block() != block || tile.entity == null || tile.entity.items == null) return;
 
-                            tile.block().handleStack(item, removed, tile, player);
-                            remaining[1] -= removed;
-
-                            if(end && remaining[1] > 0){
-                                tile.block().handleStack(item, remaining[1], tile, player);
-                            }
-                        });
-
-                remaining[0] -= removed;
-
-                if(end){
-                    player.isTransferring = false;
+                        if(tile.block().acceptItem(stack.item, tile)){
+                            tile.block().handleItem(stack.item, tile);
+                            stack.amount --;
+                        }
+                    });
                 }
             });
         }
@@ -297,7 +276,7 @@ public abstract class InputHandler implements InputProcessor{
 
         ItemStack stack = player.item();
 
-        if(tile.block().acceptStack(stack.item, stack.amount, tile, player) > 0 && tile.getTeam() == player.getTeam() && tile.block().hasItems){
+        if(tile.block().acceptItem(stack.item, tile) > 0 && tile.getTeam() == player.getTeam() && tile.block().hasItems){
             Call.transferInventory(player, tile);
         }else{
             Call.dropItem(player.angleTo(x, y));

@@ -23,9 +23,6 @@ import static io.anuke.mindustry.Vars.tilesize;
 import static io.anuke.mindustry.Vars.world;
 
 public class PowerNode extends PowerBlock{
-    public static final float thicknessScl = 0.7f;
-    public static final float flashScl = 0.12f;
-
     //last distribution block placed
     private static int lastPlaced = -1;
 
@@ -37,8 +34,12 @@ public class PowerNode extends PowerBlock{
 
     public PowerNode(String name){
         super(name);
+        //note that power nodes don't update!
+        //updating is handler by generators or consumers, and nodes themselves don't need to update anything
         expanded = true;
         layer = Layer.power;
+        update = false;
+        destructible = true;
         configurable = true;
         consumesPower = false;
         outputsPower = false;
@@ -110,11 +111,6 @@ public class PowerNode extends PowerBlock{
         super.setStats();
 
         stats.add(BlockStat.powerRange, laserRange, StatUnit.blocks);
-    }
-
-    @Override
-    public void update(Tile tile){
-        tile.entity.power.graph.update();
     }
 
     @Override

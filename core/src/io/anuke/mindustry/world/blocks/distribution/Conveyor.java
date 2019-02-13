@@ -5,7 +5,6 @@ import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.math.geom.Vector2;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.entities.type.Unit;
@@ -25,8 +24,10 @@ public class Conveyor extends Block{
 
     protected Conveyor(String name){
         super(name);
+        //conveyors don't update by default: only one initial 'seed' conveyor entity updates the conveyor line
+        //this entity is removed in the end
         rotate = true;
-        update = true;
+        destructible = true;
         layer = Layer.overlay;
         group = BlockGroup.transportation;
         hasItems = true;
@@ -58,6 +59,8 @@ public class Conveyor extends Block{
         int frame = entity.clogHeat <= 0.5f ? (int) (((Time.time() * speed * 8f * entity.timeScale)) % 4) : 0;
         Draw.rect(regions[Mathf.clamp(entity.blendbits, 0, regions.length - 1)][Mathf.clamp(frame, 0, regions[0].length - 1)], tile.drawx(), tile.drawy(),
             tilesize * entity.blendsclx, tilesize * entity.blendscly,  rotation*90);
+
+        Core.scene.skin.getFont("default-font").draw(entity.line.id + "", tile.drawx(), tile.drawy());
     }
 
     @Override
@@ -67,7 +70,6 @@ public class Conveyor extends Block{
         ConveyorEntity entity = tile.entity();
         entity.blendbits = 0;
         entity.blendsclx = entity.blendscly = 1;
-        entity.blendshadowrot = -1;
 
         if(blends(tile, 2) && blends(tile, 1) && blends(tile, 3)){
             entity.blendbits = 3;
@@ -81,10 +83,8 @@ public class Conveyor extends Block{
         }else if(blends(tile, 1)){
             entity.blendbits = 1;
             entity.blendscly = -1;
-            entity.blendshadowrot = 0;
         }else if(blends(tile, 3)){
             entity.blendbits = 1;
-            entity.blendshadowrot = 1;
         }
     }
 
@@ -104,6 +104,38 @@ public class Conveyor extends Block{
     @Override
     public void drawLayer(Tile tile){
 
+    }
+
+    @Override
+    public void onProximityAdded(Tile tile){
+        Tile facing = tile.facing();
+        //find block of same type that this is facing, add if necessary and stop
+        if(facing != null && facing.block() == this){
+            facing.<ConveyorEntity>entity().line.add(tile);
+            return;
+        }
+
+        //find conveyors facing this block, get first one and add it
+        for(Tile near : tile.entity.proximity()){
+            if(near.block() == this && near.facing() == tile){
+                near.<ConveyorEntity>entity().line.add(tile);
+                return;
+            }
+        }
+
+        //no line found, make a new one
+        tile.<ConveyorEntity>entity().line = new ConveyorLine(tile);
+    }
+
+    @Override
+    public void onProximityRemoved(Tile tile){
+        tile.<ConveyorEntity>entity().line.remove(tile);
+    }
+
+    @Override
+    public void update(Tile tile){
+        //note that only 1 conveyor in the line has their entity updating in the list, so this only gets called once
+        tile.<ConveyorEntity>entity().line.update();
     }
 
     @Override
@@ -131,36 +163,6 @@ public class Conveyor extends Block{
     }
 
     @Override
-    public void update(Tile tile){
-
-    }
-
-    @Override
-    public boolean isAccessible(){
-        return true;
-    }
-
-    @Override
-    public int removeStack(Tile tile, Item item, int amount){
-        return 0;
-    }
-
-    @Override
-    public void getStackOffset(Item item, Tile tile, Vector2 trns){
-        trns.trns(tile.getRotation() * 90 + 180f, tilesize / 2f);
-    }
-
-    @Override
-    public int acceptStack(Item item, int amount, Tile tile, Unit source){
-        return 0;
-    }
-
-    @Override
-    public void handleStack(Item item, int amount, Tile tile, Unit source){
-
-    }
-
-    @Override
     public boolean acceptItem(Item item, Tile tile, Tile source){
         return false;
     }
@@ -176,11 +178,11 @@ public class Conveyor extends Block{
     }
 
     public class ConveyorEntity extends TileEntity{
-        int blendshadowrot = -1;
         int blendbits;
         int blendsclx, blendscly;
-
         float clogHeat = 0f;
+
+        ConveyorLine line;
     }
 
 }

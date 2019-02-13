@@ -127,7 +127,7 @@ public class Drone extends FlyingUnit implements BuilderTrait{
             }
 
             //core full
-            if(targetItem != null && entity.tile.block().acceptStack(targetItem, 1, entity.tile, Drone.this) == 0){
+            if(targetItem != null && entity.tile.block().acceptItem(targetItem, entity.tile)){
                 setState(repair);
                 return;
             }

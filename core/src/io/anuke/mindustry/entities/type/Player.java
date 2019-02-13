@@ -55,7 +55,7 @@ public class Player extends Unit implements BuilderTrait, ShooterTrait{
     public float pointerX, pointerY;
     public String name = "name";
     public String uuid, usid;
-    public boolean isAdmin, isTransferring, isShooting, isBoosting, isMobile;
+    public boolean isAdmin, isShooting, isBoosting, isMobile;
     public float boostHeat, shootHeat, destructTime;
     public boolean achievedFlight;
     public Color color = new Color();

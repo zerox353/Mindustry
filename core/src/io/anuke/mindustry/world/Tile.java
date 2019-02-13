@@ -296,6 +296,10 @@ public class Tile implements Position, TargetTrait{
         return link == null ? this : link;
     }
 
+    public Tile facing(){
+        return world.tile(rotation);
+    }
+
     public Tile getNearby(Point2 relative){
         return world.tile(x + relative.x, y + relative.y);
     }
