@@ -118,8 +118,6 @@ public class OverlayRenderer{
                     Lines.square(tile.drawx(), tile.drawy(), tile.block().size * tilesize / 2f + 1 + Mathf.absin(Time.time(), 5f, 1f));
                     Draw.color();
                 }
-            }
         }
     }
-
 }

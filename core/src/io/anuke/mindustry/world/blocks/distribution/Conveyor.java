@@ -5,6 +5,7 @@ import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Geometry;
+import io.anuke.arc.util.Log;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.entities.type.Unit;
@@ -54,7 +55,7 @@ public class Conveyor extends Block{
     @Override
     public void draw(Tile tile){
         ConveyorEntity entity = tile.entity();
-        byte rotation = tile.getRotation();
+        byte rotation = tile.rotation();
 
         int frame = entity.clogHeat <= 0.5f ? (int) (((Time.time() * speed * 8f * entity.timeScale)) % 4) : 0;
         Draw.rect(regions[Mathf.clamp(entity.blendbits, 0, regions.length - 1)][Mathf.clamp(frame, 0, regions[0].length - 1)], tile.drawx(), tile.drawy(),
@@ -87,11 +88,11 @@ public class Conveyor extends Block{
     }
 
     private boolean blends(Tile tile, int direction){
-        Tile other = tile.getNearby(Mathf.mod(tile.getRotation() - direction, 4));
-        if(other != null) other = other.target();
+        Tile other = tile.getNearby(Mathf.mod(tile.rotation() - direction, 4));
+        if(other != null) other = other.link();
 
         return other != null && other.block().outputsItems()
-        && ((tile.getNearby(tile.getRotation()) == other) || (!other.block().rotate || other.getNearby(other.getRotation()) == tile));
+        && ((tile.getNearby(tile.rotation()) == other) || (!other.block().rotate || other.getNearby(other.rotation()) == tile));
     }
 
     @Override
@@ -123,6 +124,7 @@ public class Conveyor extends Block{
         for(Tile near : tile.entity.proximity()){
             if(near.block() == this && near.facing() == tile){
                 near.<ConveyorEntity>entity().line.add(tile);
+                //TODO proper merging in this case: > ^ <, where ^ is the last one to be placed
                 return;
             }
         }
@@ -151,7 +153,7 @@ public class Conveyor extends Block{
         float speed = this.speed * tilesize / 2.3f;
         float centerSpeed = 0.1f;
         float centerDstScl = 3f;
-        float tx = Geometry.d4[tile.getRotation()].x, ty = Geometry.d4[tile.getRotation()].y;
+        float tx = Geometry.d4[tile.rotation()].x, ty = Geometry.d4[tile.rotation()].y;
 
         float centerx = 0f, centery = 0f;
 
