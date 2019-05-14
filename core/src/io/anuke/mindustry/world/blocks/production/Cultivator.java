@@ -2,23 +2,22 @@ package io.anuke.mindustry.world.blocks.production;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Lines;
-import io.anuke.arc.graphics.g2d.TextureRegion;
+import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.RandomXS128;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.type.TileEntity;
+import io.anuke.mindustry.graphics.Pal;
+import io.anuke.mindustry.ui.Bar;
 import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.meta.Attribute;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 public class Cultivator extends GenericCrafter{
-    protected static final Color plantColor = Color.valueOf("648b55");
-    protected static final Color plantColorLight = Color.valueOf("73a75f");
+    protected static final Color plantColor = Color.valueOf("5541b1");
+    protected static final Color plantColorLight = Color.valueOf("7457ce");
     protected static final Color bottomColor = Color.valueOf("474747");
 
     protected TextureRegion middleRegion, topRegion;
@@ -44,6 +43,21 @@ public class Cultivator extends GenericCrafter{
 
         CultivatorEntity entity = tile.entity();
         entity.warmup = Mathf.lerpDelta(entity.warmup, entity.cons.valid() ? 1f : 0f, 0.015f);
+    }
+
+    @Override
+    public void setBars(){
+        super.setBars();
+        bars.add("multiplier", entity -> new Bar(() ->
+        Core.bundle.formatFloat("bar.efficiency",
+        ((((CultivatorEntity)entity).boost + 1f) * ((CultivatorEntity)entity).warmup) * 100f, 1),
+        () -> Pal.ammo,
+        () -> ((CultivatorEntity)entity).warmup));
+    }
+
+    @Override
+    public void drawPlace(int x, int y, int rotation, boolean valid){
+        drawPlaceText(Core.bundle.formatFloat("bar.efficiency", (1 + sumAttribute(Attribute.spores, x, y)) * 100, 1), x, y, valid);
     }
 
     @Override
@@ -84,16 +98,33 @@ public class Cultivator extends GenericCrafter{
         return new CultivatorEntity();
     }
 
+    @Override
+    public void onProximityAdded(Tile tile){
+        super.onProximityAdded(tile);
+
+        CultivatorEntity entity = tile.entity();
+        entity.boost = sumAttribute(Attribute.spores, tile.x, tile.y);
+    }
+
+    @Override
+    protected float getProgressIncrease(TileEntity entity, float baseTime){
+        CultivatorEntity c = (CultivatorEntity)entity;
+        return super.getProgressIncrease(entity, baseTime) * (1f + c.boost);
+    }
+
     public static class CultivatorEntity extends GenericCrafterEntity{
         public float warmup;
+        public float boost;
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeFloat(warmup);
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             warmup = stream.readFloat();
         }
     }

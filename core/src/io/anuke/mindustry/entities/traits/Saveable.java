@@ -1,11 +1,8 @@
 package io.anuke.mindustry.entities.traits;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 public interface Saveable{
     void writeSave(DataOutput stream) throws IOException;
-
-    void readSave(DataInput stream) throws IOException;
+    void readSave(DataInput stream, byte version) throws IOException;
 }

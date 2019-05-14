@@ -1,31 +1,33 @@
 package io.anuke.mindustry.world.consumers;
 
-import io.anuke.arc.math.Mathf;
 import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.BlockStats;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.meta.*;
 
 /** Consumer class for blocks which consume power while being connected to a power graph. */
 public class ConsumePower extends Consume{
     /** The maximum amount of power which can be processed per tick. This might influence efficiency or load a buffer. */
-    protected final float powerPerTick;
+    public final float usage;
     /** The maximum power capacity in power units. */
-    public final float powerCapacity;
+    public final float capacity;
     /** True if the module can store power. */
-    public final boolean isBuffered;
+    public final boolean buffered;
 
-    public ConsumePower(float powerPerTick, float powerCapacity, boolean isBuffered){
-        this.powerPerTick = powerPerTick;
-        this.powerCapacity = powerCapacity;
-        this.isBuffered = isBuffered;
+    public ConsumePower(float usage, float capacity, boolean buffered){
+        this.usage = usage;
+        this.capacity = capacity;
+        this.buffered = buffered;
     }
 
     @Override
-    public void buildTooltip(Table table){
-        // No tooltip for power
+    public ConsumeType type(){
+        return ConsumeType.power;
+    }
+
+    @Override
+    public void build(Tile tile, Table table){
+        //No tooltip for power, for now
     }
 
     @Override
@@ -34,25 +36,25 @@ public class ConsumePower extends Consume{
     }
 
     @Override
-    public void update(Block block, TileEntity entity){
+    public void update(TileEntity entity){
         // Nothing to do since PowerGraph directly updates entity.power.satisfaction
     }
 
     @Override
-    public boolean valid(Block block, TileEntity entity){
-        if(isBuffered){
+    public boolean valid(TileEntity entity){
+        if(buffered){
             return true;
         }else{
-            return entity.power.satisfaction >= 0.9999f;
+            return entity.power.satisfaction > 0f;
         }
     }
 
     @Override
     public void display(BlockStats stats){
-        if(isBuffered){
-            stats.add(BlockStat.powerCapacity, powerCapacity, StatUnit.none);
+        if(buffered){
+            stats.add(BlockStat.powerCapacity, capacity, StatUnit.none);
         }else{
-            stats.add(BlockStat.powerUse, powerPerTick * 60f, StatUnit.powerSecond);
+            stats.add(BlockStat.powerUse, usage * 60f, StatUnit.powerSecond);
         }
     }
 
@@ -62,12 +64,11 @@ public class ConsumePower extends Consume{
      * @param entity The entity which contains the power module.
      * @return The amount of power which is requested per tick.
      */
-    public float requestedPower(Block block, TileEntity entity){
-        if(isBuffered){
-            // Stop requesting power once the buffer is full.
-            return Mathf.isEqual(entity.power.satisfaction, 1.0f) ? 0.0f : powerPerTick;
+    public float requestedPower(TileEntity entity){
+        if(buffered){
+            return (1f-entity.power.satisfaction)*capacity;
         }else{
-            return powerPerTick;
+            return usage;
         }
     }
 

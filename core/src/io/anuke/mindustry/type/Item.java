@@ -5,50 +5,39 @@ import io.anuke.arc.collection.Array;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.Strings;
-import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.game.UnlockableContent;
-import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.ui.ContentDisplay;
+import io.anuke.mindustry.world.blocks.Floor;
+import io.anuke.mindustry.world.blocks.OreBlock;
+
+import static io.anuke.mindustry.Vars.content;
 
 public class Item extends UnlockableContent implements Comparable<Item>{
-    public final String name;
-    public final String description;
     public final Color color;
     private TextureRegion[] regions;
 
-    /**type of the item; used for tabs and core acceptance. default value is {@link ItemType#resource}.*/
+    /** type of the item; used for tabs and core acceptance. default value is {@link ItemType#resource}. */
     public ItemType type = ItemType.resource;
-    /**how explosive this item is.*/
+    /** how explosive this item is. */
     public float explosiveness = 0f;
-    /**flammability above 0.3 makes this eleigible for item burners.*/
+    /** flammability above 0.3 makes this eleigible for item burners. */
     public float flammability = 0f;
-    /**how radioactive this item is. 0=none, 1=chernobyl ground zero*/
+    /** how radioactive this item is. 0=none, 1=chernobyl ground zero */
     public float radioactivity;
-    /**drill hardness of the item*/
+    /** drill hardness of the item */
     public int hardness = 0;
-    /**the burning color of this item. TODO unused; implement*/
-    public Color flameColor = Pal.darkFlame.cpy();
     /**
      * base material cost of this item, used for calculating place times
      * 1 cost = 1 tick added to build time
      */
-    public float cost = 3f;
-    /**Whether this item has ores generated for it.*/
-    public boolean genOre = false;
-    /**If true, item is always unlocked.*/
+    public float cost = 1f;
+    /** If true, item is always unlocked. */
     public boolean alwaysUnlocked = false;
 
     public Item(String name, Color color){
-        this.name = name;
+        super(name);
         this.color = color;
         this.description = Core.bundle.getOrNull("item." + this.name + ".description");
-
-        if(!Core.bundle.has("item." + this.name + ".name")){
-            Log.err("Warning: item '" + name + "' is missing a localized name. Add the following to bundle.properties:");
-            Log.err("item." + this.name + ".name = " + Strings.capitalize(name.replace('-', '_')));
-        }
     }
 
     public void load(){
@@ -64,7 +53,7 @@ public class Item extends UnlockableContent implements Comparable<Item>{
     }
 
     @Override
-    public boolean alwaysUnlocked() {
+    public boolean alwaysUnlocked(){
         return alwaysUnlocked;
     }
 
@@ -80,7 +69,7 @@ public class Item extends UnlockableContent implements Comparable<Item>{
 
     @Override
     public TextureRegion getContentIcon(){
-        return icon(Icon.large);
+        return icon(Icon.xlarge);
     }
 
     @Override
@@ -94,20 +83,15 @@ public class Item extends UnlockableContent implements Comparable<Item>{
     }
 
     @Override
-    public String getContentName(){
-        return name;
-    }
-
-    @Override
     public ContentType getContentType(){
         return ContentType.item;
     }
 
     public enum Icon{
-        small(8*2),
-        medium(8*3),
-        large(8*4),
-        xlarge(8*5);
+        small(8 * 2),
+        medium(8 * 3),
+        large(8 * 4),
+        xlarge(8 * 5);
 
         public final int size;
 
@@ -116,8 +100,8 @@ public class Item extends UnlockableContent implements Comparable<Item>{
         }
     }
 
-    /**Allocates a new array containing all items the generate ores.*/
+    /** Allocates a new array containing all items that generate ores. */
     public static Array<Item> getAllOres(){
-        return Vars.content.items().select(i -> i.genOre);
+        return content.blocks().select(b -> b instanceof OreBlock).map(b -> ((Floor)b).itemDrop);
     }
 }

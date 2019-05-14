@@ -3,23 +3,14 @@ package io.anuke.mindustry.ui.dialogs;
 import io.anuke.arc.Core;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.scene.event.Touchable;
-import io.anuke.arc.scene.ui.Image;
-import io.anuke.arc.scene.ui.ScrollPane;
-import io.anuke.arc.scene.ui.TextButton;
+import io.anuke.arc.scene.ui.*;
 import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.scene.utils.UIUtils;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.Scaling;
-import io.anuke.arc.util.Strings;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.core.Platform;
 import io.anuke.mindustry.io.MapIO;
 import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.maps.MapMeta;
-import io.anuke.mindustry.maps.MapTileData;
 import io.anuke.mindustry.ui.BorderImage;
-
-import java.io.DataInputStream;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -33,27 +24,34 @@ public class MapsDialog extends FloatingDialog{
         buttons.addImageTextButton("$editor.importmap", "icon-add", 14 * 2, () -> {
             Platform.instance.showFileChooser("$editor.importmap", "Map File", file -> {
                 try{
-                    DataInputStream stream = new DataInputStream(file.read());
-                    MapMeta meta = MapIO.readMapMeta(stream);
-                    MapTileData data = MapIO.readTileData(stream, meta, true);
-                    stream.close();
+                    Map map = MapIO.createMap(file, true);
+                    String name = map.tags.get("name");
+                    if(name == null){
+                        ui.showError("$editor.errorname");
+                        return;
+                    }
 
-                    String name = meta.tags.get("name", file.nameWithoutExtension());
+                    Map conflict = world.maps.all().find(m -> m.name().equals(name));
 
-                    if(world.maps.getByName(name) != null && !world.maps.getByName(name).custom){
+                    if(conflict != null && !conflict.custom){
                         ui.showError(Core.bundle.format("editor.import.exists", name));
-                    }else if(world.maps.getByName(name) != null){
+                    }else if(conflict != null){
                         ui.showConfirm("$confirm", "$editor.overwrite.confirm", () -> {
-                            world.maps.saveMap(name, data, meta.tags);
-                            setup();
+                            try{
+                                world.maps.importMap(file);
+                                setup();
+                            }catch(Exception e){
+                                ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
+                                Log.err(e);
+                            }
                         });
                     }else{
-                        world.maps.saveMap(name, data, meta.tags);
+                        world.maps.importMap(file);
                         setup();
                     }
 
                 }catch(Exception e){
-                    ui.showError(Core.bundle.format("editor.errorimageload", Strings.parseException(e, false)));
+                    ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
                     Log.err(e);
                 }
             }, true, mapExtension);
@@ -89,7 +87,7 @@ public class MapsDialog extends FloatingDialog{
             TextButton button = maps.addButton("", "clear", () -> showMapInfo(map)).width(mapsize).pad(8).get();
             button.clearChildren();
             button.margin(9);
-            button.add(map.meta.tags.get("name", map.name)).growX().center().get().setEllipsis(true);
+            button.add(map.name()).width(mapsize - 18f).center().get().setEllipsis(true);
             button.row();
             button.addImage("white").growX().pad(4).color(Color.GRAY);
             button.row();
@@ -111,7 +109,7 @@ public class MapsDialog extends FloatingDialog{
         dialog = new FloatingDialog("$editor.mapinfo");
         dialog.addCloseButton();
 
-        float mapsize = UIUtils.portrait() ? 160f : 300f;
+        float mapsize = Core.graphics.isPortrait() ? 160f : 300f;
         Table table = dialog.cont;
 
         table.stack(new Image(map.texture).setScaling(Scaling.fit), new BorderImage(map.texture).setScaling(Scaling.fit)).size(mapsize);
@@ -129,24 +127,22 @@ public class MapsDialog extends FloatingDialog{
 
             t.add("$editor.name").padRight(10).color(Color.GRAY).padTop(0);
             t.row();
-            t.add(map.meta.tags.get("name", map.name)).growX().wrap().padTop(2);
+            t.add(map.name()).growX().wrap().padTop(2);
             t.row();
             t.add("$editor.author").padRight(10).color(Color.GRAY);
             t.row();
-            t.add(map.meta.author()).growX().wrap().padTop(2);
+            t.add(map.author()).growX().wrap().padTop(2);
             t.row();
             t.add("$editor.description").padRight(10).color(Color.GRAY).top();
             t.row();
-            t.add(map.meta.description()).growX().wrap().padTop(2);
-            t.row();
-            t.add("$editor.oregen.info").padRight(10).color(Color.GRAY);
+            t.add(map.description()).growX().wrap().padTop(2);
         }).height(mapsize).width(mapsize);
 
         table.row();
 
         table.addImageTextButton("$editor.openin", "icon-load-map", 16 * 2, () -> {
             try{
-                Vars.ui.editor.beginEditMap(map.stream.get());
+                Vars.ui.editor.beginEditMap(map.file);
                 dialog.hide();
                 hide();
             }catch(Exception e){
@@ -156,7 +152,7 @@ public class MapsDialog extends FloatingDialog{
         }).fillX().height(54f).marginLeft(10);
 
         table.addImageTextButton("$delete", "icon-trash-16", 16 * 2, () -> {
-            ui.showConfirm("$confirm", Core.bundle.format("map.delete", map.name), () -> {
+            ui.showConfirm("$confirm", Core.bundle.format("map.delete", map.name()), () -> {
                 world.maps.removeMap(map);
                 dialog.hide();
                 setup();

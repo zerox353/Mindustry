@@ -12,6 +12,10 @@
       name: white,
       color: { r: 0, g: 0, b: 0, a: 0.9 }
     },
+    guideDim: {
+      name: white,
+      color: { r: 0, g: 0, b: 0, a: 0.3 }
+    },
     invis: {
       name: white,
       color: { r: 0, g: 0, b: 0, a: 0 }
@@ -277,8 +281,10 @@
       font: default-font-chat,
       fontColor: white,
       disabledFontColor: gray,
+      disabledBackground: underline-disabled,
       selection: selection,
       background: underline,
+      invalidBackground: underline-red,
       cursor: cursor,
       messageFont: default-font,
       messageFontColor: gray
@@ -300,9 +306,12 @@
       checkboxOff: check-off,
       checkboxOnOver: check-on-over,
       checkboxOver: check-over,
+      checkboxOnDisabled: check-on-disabled,
+      checkboxOffDisabled: check-disabled,
       font: default-font,
       fontColor: white,
-      disabledFontColor: gray
+      disabledFontColor: gray,
+
     }
   }
 }

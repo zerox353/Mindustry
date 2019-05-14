@@ -1,12 +1,12 @@
 package io.anuke.mindustry.world.blocks;
 
 import io.anuke.arc.Core;
+import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.meta.BlockGroup;
 import io.anuke.mindustry.world.modules.LiquidModule;
-import io.anuke.arc.graphics.g2d.Draw;
 
 public class LiquidBlock extends Block{
     protected TextureRegion liquidRegion, bottomRegion, topRegion;
@@ -38,7 +38,7 @@ public class LiquidBlock extends Block{
     public void draw(Tile tile){
         LiquidModule mod = tile.entity.liquids;
 
-        int rotation = rotate ? tile.getRotation() * 90 : 0;
+        int rotation = rotate ? tile.rotation() * 90 : 0;
 
         Draw.rect(bottomRegion, tile.drawx(), tile.drawy(), rotation);
 

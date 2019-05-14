@@ -3,6 +3,7 @@ package io.anuke.mindustry.ui.dialogs;
 import io.anuke.arc.Core;
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.ObjectSet;
+import io.anuke.arc.collection.ObjectSet.ObjectSetIterator;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.Lines;
 import io.anuke.arc.scene.Group;
@@ -17,6 +18,7 @@ import io.anuke.mindustry.game.Saves.SaveSlot;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.io.SaveIO.SaveException;
 import io.anuke.mindustry.type.Zone;
+import io.anuke.mindustry.type.Zone.ZoneRequirement;
 import io.anuke.mindustry.ui.ItemsDisplay;
 import io.anuke.mindustry.ui.TreeLayout;
 import io.anuke.mindustry.ui.TreeLayout.TreeNode;
@@ -48,6 +50,13 @@ public class DeployDialog extends FloatingDialog{
         titleTable.remove();
         margin(0f).marginBottom(8);
 
+        if(!Core.settings.getBool("zone-info", false)){
+            Core.app.post(() -> ui.showInfoText("TEMPORARY GUIDE ON HOW TO PLAY ZONES", "- deploy to zones by selecting them here\n- most zones require items to deploy\n- once you survive a set amount of waves, you can launch all the resources in your core\n- use these items to research in the tech tree or uncover new zones"));
+
+            Core.settings.put("zone-info", true);
+            Core.settings.save();
+        }
+
         cont.stack(control.saves.getZoneSlot() == null ? new View() : new Table(){{
             SaveSlot slot = control.saves.getZoneSlot();
 
@@ -64,11 +73,11 @@ public class DeployDialog extends FloatingDialog{
                     }catch(SaveException e){ //make sure to handle any save load errors!
                         e.printStackTrace();
                         if(control.saves.getZoneSlot() != null) control.saves.getZoneSlot().delete();
-                        ui.showInfo("$save.corrupted");
+                        Core.app.post(() -> ui.showInfo("$save.corrupted"));
                         show();
                     }
                 });
-            }).size(200f).get();
+            }).size(230f).get();
             b[0] = button;
 
             String color = "[lightgray]";
@@ -90,11 +99,22 @@ public class DeployDialog extends FloatingDialog{
             }).growX().height(50f).pad(-12).padTop(10);
 
         }}, new ItemsDisplay()).grow();
+
+        //set up direct and indirect children
+        for(ZoneNode node : nodes){
+            node.allChildren.clear();
+            node.allChildren.addAll(node.children);
+            for(ZoneNode other : new ObjectSetIterator<>(nodes)){
+                if(Structs.contains(other.zone.zoneRequirements, req -> req.zone == node.zone)){
+                    node.allChildren.add(other);
+                }
+            }
+        }
     }
 
     boolean hidden(Zone zone){
-        for(Zone other : zone.zoneRequirements){
-            if(!data.isUnlocked(other)){
+        for(ZoneRequirement other : zone.zoneRequirements){
+            if(!data.isUnlocked(other.zone)){
                 return true;
             }
         }
@@ -106,93 +126,17 @@ public class DeployDialog extends FloatingDialog{
         drawDefaultBackground(x, y);
     }
 
-
-
     void buildButton(Zone zone, TextButton button){
         button.setDisabled(() -> hidden(zone));
         button.clicked(() -> info.show(zone));
 
         if(zone.unlocked()){
-            //button.table(title -> {
             button.addImage("icon-zone").padRight(3);
             button.labelWrap(zone.localizedName()).width(140).growX();
-            //});
-
-            //if(data.getWaveScore(zone) > 0){
-            //    button.add(Core.bundle.format("bestwave", data.getWaveScore(zone)));
-            //}
-
-            /*
-            button.add("$launch").color(Color.LIGHT_GRAY).pad(4);
-            button.row();
-            button.table(req -> {
-                for(ItemStack stack : zone.deployCost){
-                    req.addImage(stack.item.region).size(8 * 3);
-                    req.add(stack.amount + "").left();
-                }
-            }).pad(3).growX();*/
         }else{
             button.addImage("icon-zone-locked");
             button.row();
             button.add("$locked");
-
-            /*else{
-            button.addImage("icon-zone-locked");
-            button.row();
-            button.add("$locked").padBottom(6);
-
-            if(!hidden(zone)){
-                button.row();
-
-                button.table(req -> {
-                    req.defaults().left();
-
-                    if(zone.zoneRequirements.length > 0){
-                        req.table(r -> {
-                            r.add("$complete").colspan(2).left();
-                            r.row();
-                            for(Zone other : zone.zoneRequirements){
-                                r.addImage("icon-zone").padRight(4);
-                                r.add(other.localizedName()).color(Color.LIGHT_GRAY);
-                                r.addImage(data.isCompleted(other) ? "icon-check-2" : "icon-cancel-2")
-                                .color(data.isCompleted(other) ? Color.LIGHT_GRAY : Color.SCARLET).padLeft(3);
-                                r.row();
-                            }
-                        });
-                    }
-
-                    req.row();
-
-                    if(zone.itemRequirements.length > 0){
-                        req.table(r -> {
-                            for(ItemStack stack : zone.itemRequirements){
-                                r.addImage(stack.item.region).size(8 * 3).padRight(4);
-                                r.add(Math.min(data.getItem(stack.item), stack.amount) + "/" + stack.amount)
-                                .color(stack.amount > data.getItem(stack.item) ? Color.SCARLET : Color.LIGHT_GRAY).left();
-                                r.row();
-                            }
-                        }).padTop(10);
-                    }
-
-                    req.row();
-
-                    if(zone.blockRequirements.length > 0){
-                        req.table(r -> {
-                            r.add("$research.list").colspan(2).left();
-                            r.row();
-                            for(Block block : zone.blockRequirements){
-                                r.addImage(block.icon(Icon.small)).size(8 * 3).padRight(4);
-                                r.add(block.formalName).color(Color.LIGHT_GRAY);
-                                r.addImage(data.isUnlocked(block) ? "icon-check-2" : "icon-cancel-2")
-                                .color(data.isUnlocked(block) ? Color.LIGHT_GRAY : Color.SCARLET).padLeft(3);
-                                r.row();
-                            }
-
-                        }).padTop(10);
-                    }
-                }).growX();
-            }
-        }*/
         }
     }
 
@@ -206,7 +150,7 @@ public class DeployDialog extends FloatingDialog{
                 TextButton button = new TextButton("", "node");
                 button.setSize(node.width, node.height);
                 button.update(() -> {
-                    button.setPosition(node.x + panX + width/2f, node.y + panY + height/2f, Align.center);
+                    button.setPosition(node.x + panX + width / 2f, node.y + panY + height / 2f, Align.center);
                 });
                 button.clearChildren();
                 buildButton(node.zone, button);
@@ -221,10 +165,10 @@ public class DeployDialog extends FloatingDialog{
 
         @Override
         public void draw(){
-            float offsetX = panX + width/2f + x, offsetY = panY + height/2f + y;
+            float offsetX = panX + width / 2f + x, offsetY = panY + height / 2f + y;
 
             for(ZoneNode node : nodes){
-                for(ZoneNode child : node.children){
+                for(ZoneNode child : node.allChildren){
                     Lines.stroke(Unit.dp.scl(3f), node.zone.locked() || child.zone.locked() ? Pal.locked : Pal.accent);
                     Lines.line(node.x + offsetX, node.y + offsetY, child.x + offsetX, child.y + offsetY);
                 }
@@ -237,6 +181,7 @@ public class DeployDialog extends FloatingDialog{
 
     class ZoneNode extends TreeNode<ZoneNode>{
         final Array<Zone> arr = new Array<>();
+        final Array<ZoneNode> allChildren = new Array<>();
         final Zone zone;
 
         ZoneNode(Zone zone, ZoneNode parent){
@@ -246,7 +191,7 @@ public class DeployDialog extends FloatingDialog{
             this.height /= 2f;
             nodes.add(this);
 
-            arr.selectFrom(content.zones(), other -> Structs.contains(other.zoneRequirements, zone));
+            arr.selectFrom(content.zones(), other -> other.zoneRequirements.length > 0 && other.zoneRequirements[0].zone == zone);
 
             children = new ZoneNode[arr.size];
             for(int i = 0; i < children.length; i++){

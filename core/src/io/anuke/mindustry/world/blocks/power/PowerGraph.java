@@ -1,15 +1,12 @@
 package io.anuke.mindustry.world.blocks.power;
 
 import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.IntSet;
-import io.anuke.arc.collection.ObjectSet;
-import io.anuke.arc.collection.Queue;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.math.Mathf;
+import io.anuke.arc.math.WindowedMean;
+import io.anuke.arc.util.Time;
 import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.consumers.Consume;
-import io.anuke.mindustry.world.consumers.ConsumePower;
-import io.anuke.mindustry.world.consumers.Consumers;
+import io.anuke.mindustry.world.consumers.*;
 
 public class PowerGraph{
     private final static Queue<Tile> queue = new Queue<>();
@@ -22,6 +19,8 @@ public class PowerGraph{
     private final ObjectSet<Tile> batteries = new ObjectSet<>();
     private final ObjectSet<Tile> all = new ObjectSet<>();
 
+    private final WindowedMean powerBalance = new WindowedMean(60);
+
     private long lastFrameUpdated = -1;
     private final int graphID;
     private static int lastGraphID;
@@ -32,6 +31,10 @@ public class PowerGraph{
 
     public int getID(){
         return graphID;
+    }
+
+    public float getPowerBalance(){
+        return powerBalance.getMean();
     }
 
     public float getPowerProduced(){
@@ -46,10 +49,10 @@ public class PowerGraph{
         float powerNeeded = 0f;
         for(Tile consumer : consumers){
             Consumers consumes = consumer.block().consumes;
-            if(consumes.has(ConsumePower.class)){
-                ConsumePower consumePower = consumes.get(ConsumePower.class);
+            if(consumes.hasPower()){
+                ConsumePower consumePower = consumes.getPower();
                 if(otherConsumersAreValid(consumer, consumePower)){
-                    powerNeeded += consumePower.requestedPower(consumer.block(), consumer.entity) * consumer.entity.delta();
+                    powerNeeded += consumePower.requestedPower(consumer.entity) * consumer.entity.delta();
                 }
             }
         }
@@ -60,8 +63,8 @@ public class PowerGraph{
         float totalAccumulator = 0f;
         for(Tile battery : batteries){
             Consumers consumes = battery.block().consumes;
-            if(consumes.has(ConsumePower.class)){
-                totalAccumulator += battery.entity.power.satisfaction * consumes.get(ConsumePower.class).powerCapacity;
+            if(consumes.hasPower()){
+                totalAccumulator += battery.entity.power.satisfaction * consumes.getPower().capacity;
             }
         }
         return totalAccumulator;
@@ -70,9 +73,9 @@ public class PowerGraph{
     public float getBatteryCapacity(){
         float totalCapacity = 0f;
         for(Tile battery : batteries){
-            Consumers consumes = battery.block().consumes;
-            if(consumes.has(ConsumePower.class)){
-                totalCapacity += consumes.get(ConsumePower.class).requestedPower(battery.block(), battery.entity) * battery.entity.delta();
+            if(battery.block().consumes.hasPower()){
+                ConsumePower power = battery.block().consumes.getPower();
+                totalCapacity += (1f - battery.entity.power.satisfaction) * power.capacity;
             }
         }
         return totalCapacity;
@@ -80,15 +83,15 @@ public class PowerGraph{
 
     public float useBatteries(float needed){
         float stored = getBatteryStored();
-        if(Mathf.isEqual(stored, 0f)){ return 0f; }
+        if(Mathf.isEqual(stored, 0f)) return 0f;
 
         float used = Math.min(stored, needed);
         float consumedPowerPercentage = Math.min(1.0f, needed / stored);
         for(Tile battery : batteries){
             Consumers consumes = battery.block().consumes;
-            if(consumes.has(ConsumePower.class)){
-                ConsumePower consumePower = consumes.get(ConsumePower.class);
-                if(consumePower.powerCapacity > 0f){
+            if(consumes.hasPower()){
+                ConsumePower consumePower = consumes.getPower();
+                if(consumePower.capacity > 0f){
                     battery.entity.power.satisfaction = Math.max(0.0f, battery.entity.power.satisfaction - consumedPowerPercentage);
                 }
             }
@@ -98,15 +101,16 @@ public class PowerGraph{
 
     public float chargeBatteries(float excess){
         float capacity = getBatteryCapacity();
-        if(Mathf.isEqual(capacity, 0f)){ return 0f; }
+        //how much of the missing in each battery % is charged
+        float chargedPercent = Math.min(excess/capacity, 1f);
+        if(Mathf.isEqual(capacity, 0f)) return 0f;
 
         for(Tile battery : batteries){
             Consumers consumes = battery.block().consumes;
-            if(consumes.has(ConsumePower.class)){
-                ConsumePower consumePower = consumes.get(ConsumePower.class);
-                if(consumePower.powerCapacity > 0f){
-                    float additionalPowerPercentage = Math.min(1.0f, excess / consumePower.powerCapacity);
-                    battery.entity.power.satisfaction = Math.min(1.0f, battery.entity.power.satisfaction + additionalPowerPercentage);
+            if(consumes.hasPower()){
+                ConsumePower consumePower = consumes.getPower();
+                if(consumePower.capacity > 0f){
+                    battery.entity.power.satisfaction += (1f-battery.entity.power.satisfaction) * chargedPercent;
                 }
             }
         }
@@ -114,22 +118,28 @@ public class PowerGraph{
     }
 
     public void distributePower(float needed, float produced){
-        if(Mathf.isEqual(needed, 0f)){ return; }
-
-        float coverage = Math.min(1, produced / needed);
+        //distribute even if not needed. this is because some might be requiring power but not using it; it updates consumers
+        float coverage = Mathf.isZero(needed) && Mathf.isZero(produced) ? 0f : Mathf.isZero(needed) ? 1f : Math.min(1, produced / needed);
         for(Tile consumer : consumers){
             Consumers consumes = consumer.block().consumes;
-            if(consumes.has(ConsumePower.class)){
-                ConsumePower consumePower = consumes.get(ConsumePower.class);
-                if(!otherConsumersAreValid(consumer, consumePower)){
-                    consumer.entity.power.satisfaction = 0.0f; // Only supply power if the consumer would get valid that way
-                }else{
-                    if(consumePower.isBuffered){
+            if(consumes.hasPower()){
+                ConsumePower consumePower = consumes.getPower();
+                if(consumePower.buffered){
+                    if(!Mathf.isZero(consumePower.capacity)){
                         // Add an equal percentage of power to all buffers, based on the global power coverage in this graph
-                        float maximumRate = consumePower.requestedPower(consumer.block(), consumer.entity()) * coverage * consumer.entity.delta();
-                        consumer.entity.power.satisfaction = Mathf.clamp(consumer.entity.power.satisfaction + maximumRate / consumePower.powerCapacity);
-                    }else{
+                        float maximumRate = consumePower.requestedPower(consumer.entity) * coverage * consumer.entity.delta();
+                        consumer.entity.power.satisfaction = Mathf.clamp(consumer.entity.power.satisfaction + maximumRate / consumePower.capacity);
+                    }
+                }else{
+                    //valid consumers get power as usual
+                    if(otherConsumersAreValid(consumer, consumePower)){
                         consumer.entity.power.satisfaction = coverage;
+                    }else{ //invalid consumers get an estimate, if they were to activate
+                        consumer.entity.power.satisfaction = Math.min(1, produced / (needed + consumePower.usage * consumer.entity.delta()));
+                        //just in case
+                        if(Float.isNaN(consumer.entity.power.satisfaction)){
+                            consumer.entity.power.satisfaction = 0f;
+                        }
                     }
                 }
             }
@@ -137,7 +147,7 @@ public class PowerGraph{
     }
 
     public void update(){
-        if(Core.graphics.getFrameId() == lastFrameUpdated || (consumers.size == 0 && producers.size == 0 && batteries.size == 0)){
+        if(Core.graphics.getFrameId() == lastFrameUpdated){
             return;
         }
 
@@ -145,6 +155,12 @@ public class PowerGraph{
 
         float powerNeeded = getPowerNeeded();
         float powerProduced = getPowerProduced();
+
+        powerBalance.addValue((powerProduced - powerNeeded) / Time.delta());
+
+        if(consumers.size == 0 && producers.size == 0 && batteries.size == 0){
+            return;
+        }
 
         if(!Mathf.isEqual(powerNeeded, powerProduced)){
             if(powerNeeded > powerProduced){
@@ -164,10 +180,15 @@ public class PowerGraph{
     }
 
     public void add(Tile tile){
+        if(tile.block().consumes.hasPower() && !tile.block().consumes.getPower().buffered){
+            //reset satisfaction to zero in case of direct consumer. There is no reason to clear power from buffered consumers.
+            tile.entity.power.satisfaction = 0.0f;
+        }
+
         tile.entity.power.graph = this;
         all.add(tile);
 
-        if(tile.block().outputsPower && tile.block().consumesPower && !tile.block().consumes.get(ConsumePower.class).isBuffered){
+        if(tile.block().outputsPower && tile.block().consumesPower && !tile.block().consumes.getPower().buffered){
             producers.add(tile);
             consumers.add(tile);
         }else if(tile.block().outputsPower && tile.block().consumesPower){
@@ -179,32 +200,15 @@ public class PowerGraph{
         }
     }
 
-    public void clear(){
-        for(Tile other : all){
-            if(other.entity != null && other.entity.power != null){
-                if(other.block().consumes.has(ConsumePower.class) && !other.block().consumes.get(ConsumePower.class).isBuffered){
-                    // Reset satisfaction to zero in case of direct consumer. There is no reason to clear power from buffered consumers.
-                    other.entity.power.satisfaction = 0.0f;
-                }
-                other.entity.power.graph = null;
-            }
-        }
-        all.clear();
-        producers.clear();
-        consumers.clear();
-        batteries.clear();
-    }
-
     public void reflow(Tile tile){
         queue.clear();
         queue.addLast(tile);
         closedSet.clear();
         while(queue.size > 0){
             Tile child = queue.removeFirst();
-            child.entity.power.graph = this;
             add(child);
             for(Tile next : child.block().getPowerConnections(child, outArray2)){
-                if(next.entity.power != null && next.entity.power.graph == null && !closedSet.contains(next.pos())){
+                if(!closedSet.contains(next.pos())){
                     queue.addLast(next);
                     closedSet.add(next.pos());
                 }
@@ -212,51 +216,69 @@ public class PowerGraph{
         }
     }
 
+    private void removeSingle(Tile tile){
+        all.remove(tile);
+        producers.remove(tile);
+        consumers.remove(tile);
+        batteries.remove(tile);
+    }
+
     public void remove(Tile tile){
-        clear();
+        removeSingle(tile);
+        //begin by clearing the closed set
         closedSet.clear();
 
+        //go through all the connections of this tile
         for(Tile other : tile.block().getPowerConnections(tile, outArray1)){
-            if(other.entity.power == null || other.entity.power.graph != null){ continue; }
+            //a graph has already been assigned to this tile from a previous call, skip it
+            if(other.entity.power.graph != this) continue;
+
+            //create graph for this branch
             PowerGraph graph = new PowerGraph();
+            graph.add(other);
+            //add to queue for BFS
             queue.clear();
             queue.addLast(other);
             while(queue.size > 0){
+                //get child from queue
                 Tile child = queue.removeFirst();
-                child.entity.power.graph = graph;
+                //remove it from this graph
+                removeSingle(child);
+                //add it to the new branch graph
                 graph.add(child);
+                //go through connections
                 for(Tile next : child.block().getPowerConnections(child, outArray2)){
-                    if(next != tile && next.entity.power != null && next.entity.power.graph == null && !closedSet.contains(next.pos())){
+                    //make sure it hasn't looped back, and that the new graph being assigned hasn't already been assigned
+                    //also skip closed tiles
+                    if(next != tile && next.entity.power.graph != graph && !closedSet.contains(next.pos())){
                         queue.addLast(next);
                         closedSet.add(next.pos());
                     }
                 }
             }
-            // Update the graph once so direct consumers without any connected producer lose their power
+            //update the graph once so direct consumers without any connected producer lose their power
             graph.update();
         }
     }
 
-    //currently ignores all other consumers and consumes power anyway.
     private boolean otherConsumersAreValid(Tile tile, Consume consumePower){
-        /*
         for(Consume cons : tile.block().consumes.all()){
-            if(cons != consumePower && !cons.isOptional() && !cons.valid(tile.block(), tile.entity())){
+            if(cons != consumePower && !cons.isOptional() && !cons.valid(tile.entity())){
                 return false;
             }
-        }*/
+        }
         return true;
     }
 
     @Override
     public String toString(){
         return "PowerGraph{" +
-            "producers=" + producers +
-            ", consumers=" + consumers +
-            ", batteries=" + batteries +
-            ", all=" + all +
-            ", lastFrameUpdated=" + lastFrameUpdated +
-            ", graphID=" + graphID +
-            '}';
+        "producers=" + producers +
+        ", consumers=" + consumers +
+        ", batteries=" + batteries +
+        ", all=" + all +
+        ", lastFrameUpdated=" + lastFrameUpdated +
+        ", graphID=" + graphID +
+        '}';
     }
 }

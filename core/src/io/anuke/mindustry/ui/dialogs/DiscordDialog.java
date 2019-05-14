@@ -2,8 +2,8 @@ package io.anuke.mindustry.ui.dialogs;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.graphics.Color;
-import io.anuke.mindustry.graphics.Pal;
 import io.anuke.arc.scene.ui.Dialog;
+import io.anuke.mindustry.graphics.Pal;
 
 import static io.anuke.mindustry.Vars.discordURL;
 import static io.anuke.mindustry.Vars.ui;
@@ -34,9 +34,9 @@ public class DiscordDialog extends Dialog{
             }).size(h).left();
 
             t.add("$discord").color(Pal.accent).growX().padLeft(10f);
-        }).size(470f, h).pad(10f);
+        }).size(440f, h).pad(10f);
 
-        buttons.defaults().size(170f, 50);
+        buttons.defaults().size(150f, 50);
 
         buttons.addButton("$back", this::hide);
         buttons.addButton("$copylink", () -> {

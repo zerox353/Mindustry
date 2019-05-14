@@ -15,16 +15,20 @@ public class TechTree implements ContentList{
         root = node(coreShard, () -> {
 
             node(conveyor, () -> {
-                node(launchPad, () -> {
-
-                });
 
                 node(junction, () -> {
                     node(itemBridge);
                     node(router, () -> {
+                        node(launchPad, () -> {
+                            node(launchPadLarge, () -> {
+
+                            });
+                        });
+
                         node(distributor);
-                        node(overflowGate);
-                        node(sorter);
+                        node(sorter, () -> {
+                            node(overflowGate);
+                        });
                         node(container, () -> {
                             node(unloader);
                             node(vault, () -> {
@@ -44,40 +48,45 @@ public class TechTree implements ContentList{
             });
 
             node(duo, () -> {
-                node(hail, () -> {
+                node(scatter, () -> {
+                    node(hail, () -> {
 
-                    node(salvo, () -> {
-                        node(swarmer, () -> {
-                            node(cyclone, () -> {
-                                node(spectre, () -> {
+                        node(salvo, () -> {
+                            node(swarmer, () -> {
+                                node(cyclone, () -> {
+                                    node(spectre, () -> {
+
+                                    });
+                                });
+                            });
+
+                            node(ripple, () -> {
+                                node(fuse, () -> {
 
                                 });
                             });
                         });
+                    });
+                });
 
-                        node(ripple, () -> {
-                            node(fuse, () -> {
+                node(scorch, () -> {
+                    node(arc, () -> {
+                        node(wave, () -> {
+
+                        });
+
+                        node(lancer, () -> {
+                            node(meltdown, () -> {
+
+                            });
+
+                            node(shockMine, () -> {
 
                             });
                         });
                     });
                 });
 
-                node(arc, () -> {
-                    node(wave, () -> {
-
-                    });
-
-                    node(lancer, () -> {
-                        node(meltdown, () -> {
-
-                        });
-
-                        node(shockMine, () -> {
-
-                        });
-                    });
-                });
 
                 node(copperWall, () -> {
                     node(copperWallLarge);
@@ -100,25 +109,25 @@ public class TechTree implements ContentList{
             });
 
             node(mechanicalDrill, () -> {
-                node(pneumaticDrill, () -> {
-                    node(cultivator, () -> {
-
-                    });
-
-                    node(laserDrill, () -> {
-                        node(blastDrill, () -> {
+                node(graphitePress, () -> {
+                    node(pneumaticDrill, () -> {
+                        node(cultivator, () -> {
 
                         });
 
-                        node(waterExtractor, () -> {
-                            node(oilExtractor, () -> {
+                        node(laserDrill, () -> {
+                            node(blastDrill, () -> {
 
+                            });
+
+                            node(waterExtractor, () -> {
+                                node(oilExtractor, () -> {
+
+                                });
                             });
                         });
                     });
-                });
 
-                node(graphitePress, () -> {
                     node(pyratiteMixer, () -> {
                         node(blastMixer, () -> {
 
@@ -127,7 +136,10 @@ public class TechTree implements ContentList{
 
                     node(siliconSmelter, () -> {
 
-                        node(biomatterCompressor, () -> {
+                        node(sporePress, () -> {
+                            node(coalCentrifuge, () -> {
+
+                            });
                             node(multiPress, () -> {
 
                             });
@@ -162,7 +174,6 @@ public class TechTree implements ContentList{
                 });
 
 
-
                 node(mechanicalPump, () -> {
                     node(conduit, () -> {
                         node(liquidJunction, () -> {
@@ -185,73 +196,72 @@ public class TechTree implements ContentList{
                         });
                     });
                 });
-            });
 
-            node(powerNode, () -> {
                 node(combustionGenerator, () -> {
-                    node(powerNodeLarge, () -> {
+                    node(powerNode, () -> {
+                        node(powerNodeLarge, () -> {
+                            node(surgeTower, () -> {
+
+                            });
+                        });
+
                         node(battery, () -> {
                             node(batteryLarge, () -> {
-                                node(surgeTower, () -> {
+
+                            });
+                        });
+
+                        node(mender, () -> {
+                            node(mendProjector, () -> {
+                                node(forceProjector, () -> {
+                                    node(overdriveProjector, () -> {
+
+                                    });
+                                });
+
+                                node(repairPoint, () -> {
 
                                 });
                             });
                         });
 
-                        node(mendProjector, () -> {
-                            node(forceProjector, () -> {
-                                node(overdriveProjector, () -> {
+                        node(turbineGenerator, () -> {
+                            node(thermalGenerator, () -> {
+                                node(rtgGenerator, () -> {
+                                    node(differentialGenerator, () -> {
+                                        node(thoriumReactor, () -> {
+                                            node(impactReactor, () -> {
 
-                                });
-                            });
-
-                            node(repairPoint, () -> {
-
-                            });
-                        });
-                    });
-
-                    node(turbineGenerator, () -> {
-                        node(thermalGenerator, () -> {
-                            node(rtgGenerator, () -> {
-                                node(differentialGenerator, () -> {
-                                    node(thoriumReactor, () -> {
-                                        node(impactReactor, () -> {
-
+                                            });
                                         });
                                     });
                                 });
                             });
                         });
-                    });
 
-                    node(solarPanel, () -> {
-                        node(largeSolarPanel, () -> {
+                        node(solarPanel, () -> {
+                            node(largeSolarPanel, () -> {
 
-                        });
-                    });
-                });
-
-                node(alphaDartPad, () -> {
-                    node(deltaPad, () -> {
-                        node(javelinPad);
-                        node(tauPad, () -> {
-                            node(tridentPad);
-                            node(omegaPad, () -> {
-                                node(glaivePad);
                             });
                         });
                     });
 
                     node(spiritFactory, () -> {
-                        node(daggerFactory, () -> {
-                            node(titanFactory, () -> {
-                                node(fortressFactory);
+                        node(phantomFactory);
+                    });
+
+                    node(dartPad, () -> {
+                        node(deltaPad, () -> {
+
+                            node(javelinPad, () -> {
+                                node(tridentPad, () -> {
+                                    node(glaivePad);
+                                });
                             });
-                            node(wraithFactory, () -> {
-                                node(phantomFactory);
-                                node(ghoulFactory, () -> {
-                                    node(revenantFactory);
+
+                            node(tauPad, () -> {
+                                node(omegaPad, () -> {
+
                                 });
                             });
                         });
@@ -264,9 +274,9 @@ public class TechTree implements ContentList{
     private TechNode node(Block block, Runnable children){
         ItemStack[] requirements = new ItemStack[block.buildRequirements.length];
         for(int i = 0; i < requirements.length; i++){
-            requirements[i] = new ItemStack(block.buildRequirements[i].item, block.buildRequirements[i].amount * 40);
+            requirements[i] = new ItemStack(block.buildRequirements[i].item, block.buildRequirements[i].amount * 5);
         }
-        
+
         return new TechNode(block, requirements, children);
     }
 

@@ -10,25 +10,19 @@ import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.arc.util.Align;
 import io.anuke.mindustry.content.Blocks;
 import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.input.InputHandler;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 
-import static io.anuke.mindustry.Vars.state;
-import static io.anuke.mindustry.Vars.tilesize;
+import static io.anuke.mindustry.Vars.*;
 
 public class BlockConfigFragment extends Fragment{
     private Table table = new Table();
-    private InputHandler input;
     private Tile configTile;
     private Block configBlock;
 
-    public BlockConfigFragment(InputHandler input){
-        this.input = input;
-    }
-
     @Override
     public void build(Group parent){
+        table.visible(false);
         parent.addChild(table);
     }
 
@@ -50,7 +44,7 @@ public class BlockConfigFragment extends Fragment{
         table.pack();
         table.setTransform(true);
         table.actions(Actions.scaleTo(0f, 1f), Actions.visible(true),
-                Actions.scaleTo(1f, 1f, 0.07f, Interpolation.pow3Out));
+        Actions.scaleTo(1f, 1f, 0.07f, Interpolation.pow3Out));
 
         table.update(() -> {
             if(state.is(State.menu)){
@@ -58,7 +52,7 @@ public class BlockConfigFragment extends Fragment{
                 return;
             }
 
-            if(configTile != null && configTile.block().shouldHideConfigure(configTile, input.player)){
+            if(configTile != null && configTile.block().shouldHideConfigure(configTile, player)){
                 hideConfig();
                 return;
             }

@@ -5,6 +5,7 @@ import io.anuke.arc.graphics.Color;
 public class Pal{
     public static final Color
 
+    items = Color.valueOf("2ea756"),
     command = Color.valueOf("eab678"),
 
     bulletYellow = Color.valueOf("ffeec9"),
@@ -20,6 +21,9 @@ public class Pal{
 
     lightFlame = Color.valueOf("ffdd55"),
     darkFlame = Color.valueOf("db401c"),
+
+    lightPyraFlame = Color.valueOf("ffb855"),
+    darkPyraFlame = Color.valueOf("db661c"),
 
     turretHeat = Color.valueOf("ab3400"),
 
@@ -44,6 +48,7 @@ public class Pal{
     heal = Color.valueOf("98ffa9"),
     bar = Color.SLATE,
     accent = Color.valueOf("ffd37f"),
+    stat = Color.valueOf("ffd37f"),
     locked = Color.valueOf("989aa4"),
     accentBack = Color.valueOf("d4816b"),
     place = Color.valueOf("6335f8"),
@@ -53,6 +58,7 @@ public class Pal{
     breakInvalid = Color.valueOf("d44b3d"),
     range = Color.valueOf("f4ba6e"),
     power = Color.valueOf("fbad67"),
+    powerBar = Color.valueOf("ec7b4c"),
     powerLight = Color.valueOf("fbd367"),
     placing = accent,
 

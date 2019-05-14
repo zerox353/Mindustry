@@ -4,46 +4,35 @@ import io.anuke.annotations.Annotations.Loc;
 import io.anuke.annotations.Annotations.Remote;
 import io.anuke.arc.ApplicationListener;
 import io.anuke.arc.Events;
-import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.IntMap;
 import io.anuke.arc.collection.ObjectSet;
-import io.anuke.mindustry.entities.Entities;
-import io.anuke.mindustry.entities.EntityGroup;
-import io.anuke.mindustry.entities.EntityQuery;
-import io.anuke.mindustry.entities.traits.Entity;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.Colors;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Rectangle;
 import io.anuke.arc.math.geom.Vector2;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.Structs;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.io.ByteBufferOutput;
-import io.anuke.arc.util.io.CountableByteArrayOutputStream;
-import io.anuke.mindustry.content.Mechs;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.io.*;
 import io.anuke.mindustry.content.Blocks;
 import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.entities.type.Player;
+import io.anuke.mindustry.entities.Entities;
+import io.anuke.mindustry.entities.EntityGroup;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
+import io.anuke.mindustry.entities.traits.Entity;
 import io.anuke.mindustry.entities.traits.SyncTrait;
+import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.game.EventType.WorldLoadEvent;
 import io.anuke.mindustry.game.Team;
 import io.anuke.mindustry.game.Version;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.gen.RemoteReadServer;
-import io.anuke.mindustry.net.Administration;
+import io.anuke.mindustry.net.*;
 import io.anuke.mindustry.net.Administration.PlayerInfo;
-import io.anuke.mindustry.net.Net;
-import io.anuke.mindustry.net.NetConnection;
-import io.anuke.mindustry.net.NetworkIO;
+import io.anuke.mindustry.net.Administration.TraceInfo;
 import io.anuke.mindustry.net.Packets.*;
 import io.anuke.mindustry.world.Tile;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.zip.DeflaterOutputStream;
 
@@ -51,31 +40,24 @@ import static io.anuke.mindustry.Vars.*;
 
 public class NetServer implements ApplicationListener{
     public final static int maxSnapshotSize = 430;
-
-    public final static boolean debugSnapshots = false;
-    public final static float maxSnapshotDelay = 200;
-    public final static float snapshotDropchance = 0.01f;
-
-    private final static byte[] reusableSnapArray = new byte[maxSnapshotSize];
-    private final static float serverSyncTime = 4, kickDuration = 30 * 1000;
+    private final static float serverSyncTime = 20, kickDuration = 30 * 1000;
     private final static Vector2 vector = new Vector2();
     private final static Rectangle viewport = new Rectangle();
-    private final static Array<Entity> returnArray = new Array<>();
-    /**If a player goes away of their server-side coordinates by this distance, they get teleported back.*/
+    /** If a player goes away of their server-side coordinates by this distance, they get teleported back. */
     private final static float correctDist = 16f;
 
     public final Administration admins = new Administration();
 
-    /**Maps connection IDs to players.*/
+    /** Maps connection IDs to players. */
     private IntMap<Player> connections = new IntMap<>();
     private boolean closing = false;
 
     private ByteBuffer writeBuffer = ByteBuffer.allocate(127);
     private ByteBufferOutput outputBuffer = new ByteBufferOutput(writeBuffer);
 
-    /**Stream for writing player sync data to.*/
-    private CountableByteArrayOutputStream syncStream = new CountableByteArrayOutputStream();
-    /**Data stream for writing player sync data to.*/
+    /** Stream for writing player sync data to. */
+    private ReusableByteOutStream syncStream = new ReusableByteOutStream();
+    /** Data stream for writing player sync data to. */
     private DataOutputStream dataStream = new DataOutputStream(syncStream);
 
     public NetServer(){
@@ -105,7 +87,7 @@ public class NetServer implements ApplicationListener{
             NetConnection connection = Net.getConnection(id);
 
             if(connection == null ||
-                    admins.isIPBanned(connection.address)) return;
+            admins.isIPBanned(connection.address)) return;
 
             if(connection.hasBegunConnecting){
                 kick(id, KickReason.idInUse);
@@ -178,7 +160,6 @@ public class NetServer implements ApplicationListener{
             player.name = packet.name;
             player.uuid = uuid;
             player.isMobile = packet.mobile;
-            player.mech = packet.mobile ? Mechs.starterMobile : Mechs.starterDesktop;
             player.dead = true;
             player.setNet(player.x, player.y);
             player.color.set(packet.color);
@@ -195,20 +176,7 @@ public class NetServer implements ApplicationListener{
 
             //playing in pvp mode automatically assigns players to teams
             if(state.rules.pvp){
-                //find team with minimum amount of players and auto-assign player to that.
-                Team min = Structs.findMin(Team.all, team -> {
-                    if(state.teams.isActive(team)){
-                        int count = 0;
-                        for(Player other : playerGroup.all()){
-                            if(other.getTeam() == team){
-                                count ++;
-                            }
-                        }
-                        return count;
-                    }
-                    return Integer.MAX_VALUE;
-                });
-                player.setTeam(min);
+                player.setTeam(assignTeam(playerGroup.all()));
                 Log.info("Auto-assigned player {0} to team {1}.", player.name, player.getTeam());
             }
 
@@ -226,9 +194,25 @@ public class NetServer implements ApplicationListener{
         });
     }
 
+    public Team assignTeam(Iterable<Player> players){
+        //find team with minimum amount of players and auto-assign player to that.
+        return Structs.findMin(Team.all, team -> {
+            if(state.teams.isActive(team)){
+                int count = 0;
+                for(Player other : players){
+                    if(other.getTeam() == team){
+                        count++;
+                    }
+                }
+                return count;
+            }
+            return Integer.MAX_VALUE;
+        });
+    }
+
     public void sendWorldData(Player player, int clientID){
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
-        DeflaterOutputStream def = new DeflaterOutputStream(stream);
+        DeflaterOutputStream def = new FastDeflaterOutputStream(stream);
         NetworkIO.writeWorld(player, def);
         WorldStream data = new WorldStream();
         data.stream = new ByteArrayInputStream(stream.toByteArray());
@@ -238,6 +222,12 @@ public class NetServer implements ApplicationListener{
     }
 
     public static void onDisconnect(Player player){
+        //singleplayer multiplayer wierdness
+        if(player.con == null){
+            player.remove();
+            return;
+        }
+
         if(player.con.hasConnected){
             Call.sendMessage("[accent]" + player.name + "[accent] has disconnected.");
             Call.onPlayerDisconnect(player.id);
@@ -258,16 +248,16 @@ public class NetServer implements ApplicationListener{
 
     @Remote(targets = Loc.client, unreliable = true)
     public static void onClientShapshot(
-        Player player,
-        int snapshotID,
-        float x, float y,
-        float pointerX, float pointerY,
-        float rotation, float baseRotation,
-        float xVelocity, float yVelocity,
-        Tile mining,
-        boolean boosting, boolean shooting,
-        BuildRequest[] requests,
-        float viewX, float viewY, float viewWidth, float viewHeight
+    Player player,
+    int snapshotID,
+    float x, float y,
+    float pointerX, float pointerY,
+    float rotation, float baseRotation,
+    float xVelocity, float yVelocity,
+    Tile mining,
+    boolean boosting, boolean shooting, boolean chatting,
+    BuildRequest[] requests,
+    float viewX, float viewY, float viewWidth, float viewHeight
     ){
         NetConnection connection = player.con;
         if(connection == null || snapshotID < connection.lastRecievedClientSnapshot) return;
@@ -289,14 +279,17 @@ public class NetServer implements ApplicationListener{
         player.pointerX = pointerX;
         player.pointerY = pointerY;
         player.setMineTile(mining);
+        player.isTyping = chatting;
         player.isBoosting = boosting;
         player.isShooting = shooting;
         player.getPlaceQueue().clear();
         for(BuildRequest req : requests){
+            Tile tile = world.tile(req.x, req.y);
+            if(tile == null) continue;
             //auto-skip done requests
-            if(req.breaking && world.tile(req.x, req.y).block() == Blocks.air){
+            if(req.breaking && tile.block() == Blocks.air){
                 continue;
-            }else if(!req.breaking && world.tile(req.x, req.y).block() == req.block && (!req.block.rotate || world.tile(req.x, req.y).getRotation() == req.rotation)){
+            }else if(!req.breaking && tile.block() == req.block && (!req.block.rotate || tile.rotation() == req.rotation)){
                 continue;
             }
             player.getPlaceQueue().addLast(req);
@@ -341,7 +334,7 @@ public class NetServer implements ApplicationListener{
 
         if(!player.isAdmin){
             Log.warn("ACCESS DENIED: Player {0} / {1} attempted to perform admin action without proper security access.",
-                    player.name, player.con.address);
+            player.name, player.con.address);
             return;
         }
 
@@ -362,11 +355,11 @@ public class NetServer implements ApplicationListener{
             netServer.kick(other.con.id, KickReason.kick);
             Log.info("&lc{0} has kicked {1}.", player.name, other.name);
         }else if(action == AdminAction.trace){
-            //TODO implement
+            TraceInfo info = new TraceInfo(other.con.address, other.uuid, other.con.modclient, other.con.mobile);
             if(player.con != null){
-                //Call.onTraceInfo(player.con.id, other.con.trace);
+                Call.onTraceInfo(player.con.id, other, info);
             }else{
-                //NetClient.onTraceInfo(other.con.trace);
+                NetClient.onTraceInfo(other, info);
             }
             Log.info("&lc{0} has requested trace info of {1}.", player.name, other.name);
         }
@@ -387,7 +380,7 @@ public class NetServer implements ApplicationListener{
             int used = 0;
             for(Team t : Team.all){
                 if(playerGroup.count(p -> p.getTeam() == t) > 0){
-                    used ++;
+                    used++;
                 }
             }
             return used < 2;
@@ -424,7 +417,7 @@ public class NetServer implements ApplicationListener{
             Log.err("Cannot kick unknown player!");
             return;
         }else{
-            Log.info("Kicking connection #{0} / IP: {1}. Reason: {2}", connection, con.address, reason);
+            Log.info("Kicking connection #{0} / IP: {1}. Reason: {2}", connection, con.address, reason.name());
         }
 
         Player player = connections.get(con.id);
@@ -457,49 +450,35 @@ public class NetServer implements ApplicationListener{
         byte[] stateBytes = syncStream.toByteArray();
 
         //write basic state data.
-        Call.onStateSnapshot(player.con.id, state.wavetime, state.wave, state.enemies, (short)stateBytes.length, Net.compressSnapshot(stateBytes));
+        Call.onStateSnapshot(player.con.id, state.wavetime, state.wave, state.enemies(), (short)stateBytes.length, Net.compressSnapshot(stateBytes));
 
         viewport.setSize(player.con.viewWidth, player.con.viewHeight).setCenter(player.con.viewX, player.con.viewY);
 
         //check for syncable groups
         for(EntityGroup<?> group : Entities.getAllGroups()){
             if(group.isEmpty() || !(group.all().get(0) instanceof SyncTrait)) continue;
-            //clipping is done by representatives
-            SyncTrait represent = (SyncTrait) group.all().get(0);
 
             //make sure mapping is enabled for this group
             if(!group.mappingEnabled()){
                 throw new RuntimeException("Entity group '" + group.getType() + "' contains SyncTrait entities, yet mapping is not enabled. In order for syncing to work, you must enable mapping for this group.");
             }
 
-            returnArray.clear();
-            if(represent.isClipped()){
-                EntityQuery.getNearby(group, viewport, entity -> {
-                    if(((SyncTrait) entity).isSyncing() && viewport.contains(entity.getX(), entity.getY())){
-                        returnArray.add(entity);
-                    }
-                });
-            }else{
-                for(Entity entity : group.all()){
-                    if(((SyncTrait) entity).isSyncing()){
-                        returnArray.add(entity);
-                    }
-                }
-            }
-
             syncStream.reset();
 
             int sent = 0;
 
-            for(Entity entity : returnArray){
+            for(Entity entity :  group.all()){
+                SyncTrait sync = (SyncTrait)entity;
+                if(!sync.isSyncing()) continue;
+
                 //write all entities now
                 dataStream.writeInt(entity.getID()); //write id
-                dataStream.writeByte(((SyncTrait) entity).getTypeID()); //write type ID
-                ((SyncTrait) entity).write(dataStream); //write entity
+                dataStream.writeByte(sync.getTypeID()); //write type ID
+                sync.write(dataStream); //write entity
 
-                sent ++;
+                sent++;
 
-                if(syncStream.position() > maxSnapshotSize){
+                if(syncStream.size() > maxSnapshotSize){
                     dataStream.close();
                     byte[] syncBytes = syncStream.toByteArray();
                     Call.onEntitySnapshot(player.con.id, (byte)group.getID(), (short)sent, (short)syncBytes.length, Net.compressSnapshot(syncBytes));
@@ -572,13 +551,13 @@ public class NetServer implements ApplicationListener{
         try{
 
             //iterate through each player
-            for(int i = 0; i < playerGroup.size(); i ++){
+            for(int i = 0; i < playerGroup.size(); i++){
                 Player player = playerGroup.all().get(i);
                 if(player.isLocal) continue;
 
                 NetConnection connection = player.con;
 
-                if(!connection.isConnected() || !connections.containsKey(connection.id)){
+                if(connection == null || !connection.isConnected() || !connections.containsKey(connection.id)){
                     //player disconnected, call d/c event
                     onDisconnect(player);
                     return;

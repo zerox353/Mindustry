@@ -8,9 +8,9 @@ import io.anuke.mindustry.type.Weapon;
 
 public class UnitTypes implements ContentList{
     public static UnitType
-        spirit, phantom,
-        wraith, ghoul, revenant, lich, reaper,
-        dagger, crawler, titan, fortress, eruptor, chaosArray, eradicator;
+    spirit, phantom,
+    wraith, ghoul, revenant, lich, reaper,
+    dagger, crawler, titan, fortress, eruptor, chaosArray, eradicator;
 
     @Override
     public void load(){
@@ -51,8 +51,8 @@ public class UnitTypes implements ContentList{
         }};
 
         crawler = new UnitType("crawler", Crawler.class, Crawler::new){{
-            maxVelocity = 1.1f;
-            speed = 0.22f;
+            maxVelocity = 1.2f;
+            speed = 0.26f;
             drag = 0.4f;
             hitsize = 8f;
             mass = 1.75f;
@@ -91,7 +91,7 @@ public class UnitTypes implements ContentList{
             hitsize = 10f;
             rotatespeed = 0.06f;
             targetAir = false;
-            health = 800;
+            health = 750;
             weapon = new Weapon("artillery"){{
                 length = 1f;
                 reload = 60f;
@@ -132,7 +132,7 @@ public class UnitTypes implements ContentList{
             mass = 5f;
             hitsize = 20f;
             rotatespeed = 0.06f;
-            health = 20000;
+            health = 4000;
             weapon = new Weapon("chaos"){{
                 length = 8f;
                 reload = 50f;
@@ -155,7 +155,7 @@ public class UnitTypes implements ContentList{
             mass = 5f;
             hitsize = 20f;
             rotatespeed = 0.06f;
-            health = 80000;
+            health = 10000;
             weapon = new Weapon("eradication"){{
                 length = 13f;
                 reload = 30f;
@@ -178,8 +178,9 @@ public class UnitTypes implements ContentList{
             drag = 0.01f;
             mass = 1.5f;
             isFlying = true;
-            health = 70;
+            health = 75;
             engineOffset = 5.5f;
+            range = 140f;
             weapon = new Weapon("chain-blaster"){{
                 length = 1.5f;
                 reload = 28f;
@@ -190,7 +191,7 @@ public class UnitTypes implements ContentList{
         }};
 
         ghoul = new UnitType("ghoul", Ghoul.class, Ghoul::new){{
-            health = 250;
+            health = 220;
             speed = 0.2f;
             maxVelocity = 1.4f;
             mass = 3f;
@@ -198,6 +199,7 @@ public class UnitTypes implements ContentList{
             isFlying = true;
             targetAir = false;
             engineOffset = 7.8f;
+            range = 140f;
             weapon = new Weapon("bomber"){{
                 length = 0f;
                 width = 2f;
@@ -236,7 +238,7 @@ public class UnitTypes implements ContentList{
         }};
 
         revenant = new UnitType("revenant", Revenant.class, Revenant::new){{
-            health = 4000;
+            health = 1000;
             mass = 5f;
             hitsize = 20f;
             speed = 0.1f;
@@ -266,7 +268,7 @@ public class UnitTypes implements ContentList{
         }};
 
         lich = new UnitType("lich", Revenant.class, Revenant::new){{
-            health = 15000;
+            health = 7000;
             mass = 20f;
             hitsize = 40f;
             speed = 0.01f;
@@ -285,7 +287,7 @@ public class UnitTypes implements ContentList{
                 length = 4f;
                 reload = 180f;
                 width = 22f;
-                shots = 20;
+                shots = 22;
                 shotDelay = 2;
                 inaccuracy = 10f;
                 roundrobin = true;
@@ -297,7 +299,7 @@ public class UnitTypes implements ContentList{
         }};
 
         reaper = new UnitType("reaper", Revenant.class, Revenant::new){{
-            health = 30000;
+            health = 13000;
             mass = 30f;
             hitsize = 56f;
             speed = 0.01f;

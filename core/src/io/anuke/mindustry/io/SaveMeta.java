@@ -5,6 +5,7 @@ import io.anuke.mindustry.maps.Map;
 
 import static io.anuke.mindustry.Vars.world;
 
+//TODO consider removing and replacing with a raw StringMap
 public class SaveMeta{
     public int version;
     public int build;
@@ -19,7 +20,7 @@ public class SaveMeta{
         this.build = build;
         this.timestamp = timestamp;
         this.timePlayed = timePlayed;
-        this.map = world.maps.getByName(map);
+        this.map = world.maps.all().find(m -> m.name().equals(map));
         this.wave = wave;
         this.rules = rules;
     }

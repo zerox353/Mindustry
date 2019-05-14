@@ -12,7 +12,6 @@ import io.anuke.mindustry.entities.Units;
 import io.anuke.mindustry.entities.bullet.BulletType;
 import io.anuke.mindustry.entities.units.UnitState;
 import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.graphics.Shaders;
 import io.anuke.mindustry.type.Weapon;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.Floor;
@@ -35,9 +34,15 @@ public abstract class GroundUnit extends BaseUnit{
 
         public void update(){
             TileEntity core = getClosestEnemyCore();
-            float dst = core == null ? 0 : dst(core);
 
-            if(core != null && dst < getWeapon().bullet.range() / 1.1f){
+            if(core == null){
+                setState(patrol);
+                return;
+            }
+
+            float dst = dst(core);
+
+            if(dst < getWeapon().bullet.range() / 1.1f){
                 target = core;
             }
 
@@ -49,10 +54,11 @@ public abstract class GroundUnit extends BaseUnit{
     patrol = new UnitState(){
         public void update(){
             TileEntity target = getClosestCore();
+
             if(target != null){
                 if(dst(target) > 400f){
                     moveAwayFromCore();
-                }else{
+                }else if(!(!Units.invalidateTarget(GroundUnit.this.target, GroundUnit.this) && dst(GroundUnit.this.target) < getWeapon().bullet.range())){
                     patrol();
                 }
             }
@@ -70,8 +76,9 @@ public abstract class GroundUnit extends BaseUnit{
 
     @Override
     public void move(float x, float y){
-        if(Mathf.dst(x, y) > 0.01f){
-            baseRotation = Mathf.slerpDelta(baseRotation, Mathf.angle(x, y), type.baseRotateSpeed);
+        float dst = Mathf.dst(x, y);
+        if(dst > 0.01f){
+            baseRotation = Mathf.slerp(baseRotation, Mathf.angle(x, y), type.baseRotateSpeed * (dst / type.speed));
         }
         super.move(x, y);
     }
@@ -103,27 +110,27 @@ public abstract class GroundUnit extends BaseUnit{
 
     @Override
     public void draw(){
-        Draw.alpha(Draw.getShader() != Shaders.mix ? 1f : hitTime / hitDuration);
+        Draw.mixcol(Color.WHITE, hitTime / hitDuration);
 
-        float ft = Mathf.sin(walkTime * type.speed*5f, 6f, 2f + type.hitsize/15f);
+        float ft = Mathf.sin(walkTime * type.speed * 5f, 6f, 2f + type.hitsize / 15f);
 
         Floor floor = getFloorOn();
 
         if(floor.isLiquid){
-            Draw.tint(Color.WHITE, floor.liquidColor, 0.5f);
+            Draw.color(Color.WHITE, floor.color, 0.5f);
         }
 
         for(int i : Mathf.signs){
             Draw.rect(type.legRegion,
-                    x + Angles.trnsx(baseRotation, ft * i),
-                    y + Angles.trnsy(baseRotation, ft * i),
-                    type.legRegion.getWidth() * i * Draw.scl, type.legRegion.getHeight() * Draw.scl - Mathf.clamp(ft * i, 0, 2), baseRotation - 90);
+            x + Angles.trnsx(baseRotation, ft * i),
+            y + Angles.trnsy(baseRotation, ft * i),
+            type.legRegion.getWidth() * i * Draw.scl, type.legRegion.getHeight() * Draw.scl - Mathf.clamp(ft * i, 0, 2), baseRotation - 90);
         }
 
         if(floor.isLiquid){
-            Draw.tint(Color.WHITE, floor.liquidColor, drownTime * 0.4f);
+            Draw.color(Color.WHITE, floor.color, drownTime * 0.4f);
         }else{
-            Draw.tint(Color.WHITE);
+            Draw.color(Color.WHITE);
         }
 
         Draw.rect(type.baseRegion, x, y, baseRotation - 90);
@@ -132,15 +139,15 @@ public abstract class GroundUnit extends BaseUnit{
 
         for(int i : Mathf.signs){
             float tra = rotation - 90, trY = -type.weapon.getRecoil(this, i > 0) + type.weaponOffsetY;
-            float w = - i * type.weapon.region.getWidth() * Draw.scl;
+            float w = -i * type.weapon.region.getWidth() * Draw.scl;
             Draw.rect(type.weapon.region,
-                    x + Angles.trnsx(tra, getWeapon().width * i, trY),
-                    y + Angles.trnsy(tra, getWeapon().width * i, trY), w, type.weapon.region.getHeight() * Draw.scl, rotation - 90);
+            x + Angles.trnsx(tra, getWeapon().width * i, trY),
+            y + Angles.trnsy(tra, getWeapon().width * i, trY), w, type.weapon.region.getHeight() * Draw.scl, rotation - 90);
         }
 
         drawItems();
 
-        Draw.alpha(1f);
+        Draw.mixcol();
     }
 
     @Override
@@ -175,7 +182,7 @@ public abstract class GroundUnit extends BaseUnit{
     protected void patrol(){
         vec.trns(baseRotation, type.speed * Time.delta());
         velocity.add(vec.x, vec.y);
-        vec.trns(baseRotation, type.hitsizeTile);
+        vec.trns(baseRotation, type.hitsizeTile * 3);
         Tile tile = world.tileWorld(x + vec.x, y + vec.y);
         if((tile == null || tile.solid() || tile.floor().drownTime > 0) || stuckTime > 10f){
             baseRotation += Mathf.sign(id % 2 - 0.5f) * Time.delta() * 3f;
@@ -205,11 +212,9 @@ public abstract class GroundUnit extends BaseUnit{
 
         if(tile == targetTile) return;
 
-        float angle = angleTo(targetTile);
-
-        velocity.add(vec.trns(angleTo(targetTile), type.speed*Time.delta()));
+        velocity.add(vec.trns(angleTo(targetTile), type.speed * Time.delta()));
         if(Units.invalidateTarget(target, this)){
-            rotation = Mathf.slerpDelta(rotation, angle, type.rotatespeed);
+            rotation = Mathf.slerpDelta(rotation, baseRotation, type.rotatespeed);
         }
     }
 
@@ -231,9 +236,7 @@ public abstract class GroundUnit extends BaseUnit{
 
         if(tile == targetTile || core == null || dst(core) < 90f) return;
 
-        float angle = angleTo(targetTile);
-
-        velocity.add(vec.trns(angleTo(targetTile), type.speed*Time.delta()));
-        rotation = Mathf.slerpDelta(rotation, angle, type.rotatespeed);
+        velocity.add(vec.trns(angleTo(targetTile), type.speed * Time.delta()));
+        rotation = Mathf.slerpDelta(rotation, baseRotation, type.rotatespeed);
     }
 }

@@ -7,9 +7,7 @@ import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.Liquid;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.power.ItemLiquidGenerator;
-import org.junit.jupiter.api.DynamicTest;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestFactory;
+import org.junit.jupiter.api.*;
 
 import java.util.ArrayList;
 
@@ -29,14 +27,13 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
     private ItemLiquidGenerator generator;
     private Tile tile;
     private ItemLiquidGenerator.ItemLiquidGeneratorEntity entity;
-    private final float fakeItemDuration = 60f; // 60 ticks
+    private final float fakeItemDuration = 60f; //ticks
     private final float maximumLiquidUsage = 0.5f;
 
     public void createGenerator(InputType inputType){
         generator = new ItemLiquidGenerator(inputType != InputType.liquids, inputType != InputType.items, "fakegen"){
             {
                 powerProduction = 0.1f;
-                itemDuration = 60f;
                 itemDuration = fakeItemDuration;
                 maxLiquidGenerate = maximumLiquidUsage;
             }
@@ -62,8 +59,8 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
 
         // Execute all tests for the case where only liquids are accepted and for the case where liquids and items are accepted (but supply only liquids)
         InputType[] inputTypesToBeTested = new InputType[]{
-            InputType.liquids,
-            InputType.any
+        InputType.liquids,
+        InputType.any
         };
 
         ArrayList<DynamicTest> tests = new ArrayList<>();
@@ -89,8 +86,7 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
         assertTrue(generator.acceptLiquid(tile, null, liquid, availableLiquidAmount), inputType + " | " + parameterDescription + ": Liquids which will be declined by the generator don't need to be tested - The code won't be called for those cases.");
 
         entity.liquids.add(liquid, availableLiquidAmount);
-        entity.cons.update(tile.entity);
-        assertTrue(entity.cons.valid());
+        entity.cons.update();
 
         // Perform an update on the generator once - This should use up any resource up to the maximum liquid usage
         generator.update(tile);
@@ -105,8 +101,8 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
 
         // Execute all tests for the case where only items are accepted and for the case where liquids and items are accepted (but supply only items)
         InputType[] inputTypesToBeTested = new InputType[]{
-            InputType.items,
-            InputType.any
+        InputType.items,
+        InputType.any
         };
 
         ArrayList<DynamicTest> tests = new ArrayList<>();
@@ -116,7 +112,7 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
             tests.add(dynamicTest("03", () -> simulateItemConsumption(inputType, Items.coal, 10, "Excess coal provided")));
             tests.add(dynamicTest("04", () -> simulateItemConsumption(inputType, Items.blastCompound, 1, "Blast compound provided")));
             //dynamicTest("03", () -> simulateItemConsumption(inputType, Items.plastanium, 1, "Plastanium provided")), // Not accepted by generator due to low flammability
-            tests.add(dynamicTest("05", () -> simulateItemConsumption(inputType, Items.biomatter, 1, "Biomatter provided")));
+            tests.add(dynamicTest("05", () -> simulateItemConsumption(inputType, Items.sporePod, 1, "Biomatter provided")));
             tests.add(dynamicTest("06", () -> simulateItemConsumption(inputType, Items.pyratite, 1, "Pyratite provided")));
         }
         DynamicTest[] testArray = new DynamicTest[tests.size()];
@@ -134,8 +130,7 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
         if(amount > 0){
             entity.items.add(item, amount);
         }
-        entity.cons.update(tile.entity);
-        assertTrue(entity.cons.valid());
+        entity.cons.update();
 
         // Perform an update on the generator once - This should use up one or zero items - dependent on if the item is accepted and available or not.
         generator.update(tile);
@@ -161,7 +156,7 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
 
         // Burn a single coal and test for the duration
         entity.items.add(Items.coal, 1);
-        entity.cons.update(tile.entity);
+        entity.cons.update();
         generator.update(tile);
 
         float expectedEfficiency = entity.productionEfficiency;
@@ -169,12 +164,12 @@ public class ItemLiquidGeneratorTests extends PowerTestFixture{
         float currentDuration = 0.0f;
         while((currentDuration += Time.delta()) <= fakeItemDuration){
             generator.update(tile);
-            assertEquals(expectedEfficiency, entity.productionEfficiency, "Duration: " + String.valueOf(currentDuration));
+            assertEquals(expectedEfficiency, entity.productionEfficiency, "Duration: " + currentDuration);
         }
         generator.update(tile);
-        assertEquals(0.0f, entity.productionEfficiency, "Duration: " + String.valueOf(currentDuration));
+        assertEquals(0.0f, entity.productionEfficiency, "Duration: " + currentDuration);
     }
-    
+
     enum InputType{
         items,
         liquids,

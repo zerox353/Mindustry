@@ -2,21 +2,16 @@ package io.anuke.mindustry.game;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.Events;
-import io.anuke.arc.collection.ObjectIntMap;
-import io.anuke.arc.collection.ObjectMap;
-import io.anuke.arc.collection.ObjectSet;
+import io.anuke.arc.collection.*;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.content.Items;
 import io.anuke.mindustry.game.EventType.UnlockEvent;
-import io.anuke.mindustry.game.EventType.ZoneCompleteEvent;
-import io.anuke.mindustry.type.ContentType;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.type.ItemStack;
-import io.anuke.mindustry.type.Zone;
+import io.anuke.mindustry.type.*;
 
-import static io.anuke.mindustry.Vars.*;
+import static io.anuke.mindustry.Vars.content;
+import static io.anuke.mindustry.Vars.state;
 
-/**Stores player unlocks. Clientside only.*/
+/** Stores player unlocks. Clientside only. */
 public class GlobalData{
     private ObjectMap<ContentType, ObjectSet<String>> unlocked = new ObjectMap<>();
     private ObjectIntMap<Item> items = new ObjectIntMap<>();
@@ -25,25 +20,19 @@ public class GlobalData{
     public GlobalData(){
         Core.settings.setSerializer(ContentType.class, (stream, t) -> stream.writeInt(t.ordinal()), stream -> ContentType.values()[stream.readInt()]);
         Core.settings.setSerializer(Item.class, (stream, t) -> stream.writeUTF(t.name), stream -> content.getByName(ContentType.item, stream.readUTF()));
+
+        Core.settings.setSerializer(ItemStack.class, (stream, t) -> {
+            stream.writeUTF(t.item.name);
+            stream.writeInt(t.amount);
+        }, stream -> {
+            String name = stream.readUTF();
+            int amount = stream.readInt();
+            return new ItemStack(content.getByName(ContentType.item, name), amount);
+        });
     }
 
-    public void updateWaveScore(Zone zone, int wave){
-        int value = Core.settings.getInt(zone.name + "-wave", 0);
-        if(value < wave){
-            Core.settings.put(zone.name + "-wave", wave);
-            modified = true;
-            if(wave == zone.conditionWave + 1){
-                Events.fire(new ZoneCompleteEvent(zone));
-            }
-        }
-    }
-
-    public int getWaveScore(Zone zone){
-        return Core.settings.getInt(zone.name + "-wave", 0);
-    }
-
-    public boolean isCompleted(Zone zone){
-        return getWaveScore(zone) >= zone.conditionWave;
+    public void modified(){
+        modified = true;
     }
 
     public int getItem(Item item){
@@ -51,6 +40,7 @@ public class GlobalData{
     }
 
     public void addItem(Item item, int amount){
+        unlockContent(item);
         modified = true;
         items.getAndIncrement(item, 0, amount);
         state.stats.itemsDelivered.getAndIncrement(item, 0, amount);
@@ -80,28 +70,28 @@ public class GlobalData{
         return items;
     }
 
-    /** Returns whether or not this piece of content is unlocked yet.*/
+    /** Returns whether or not this piece of content is unlocked yet. */
     public boolean isUnlocked(UnlockableContent content){
-        return content.alwaysUnlocked() || unlocked.getOr(content.getContentType(), ObjectSet::new).contains(content.getContentName());
+        return content.alwaysUnlocked() || unlocked.getOr(content.getContentType(), ObjectSet::new).contains(content.name);
     }
 
     /**
      * Makes this piece of content 'unlocked', if possible.
-     * If this piece of content is already unlocked or cannot be unlocked due to dependencies, nothing changes.
+     * If this piece of content is already unlocked, nothing changes.
      * Results are not saved until you call {@link #save()}.
      */
     public void unlockContent(UnlockableContent content){
         if(content.alwaysUnlocked()) return;
 
         //fire unlock event so other classes can use it
-        if(unlocked.getOr(content.getContentType(), ObjectSet::new).add(content.getContentName())){
+        if(unlocked.getOr(content.getContentType(), ObjectSet::new).add(content.name)){
             modified = true;
             content.onUnlock();
             Events.fire(new UnlockEvent(content));
         }
     }
 
-    /** Clears all unlocked content. Automatically saves.*/
+    /** Clears all unlocked content. Automatically saves. */
     public void reset(){
         save();
     }
@@ -122,7 +112,7 @@ public class GlobalData{
 
         //set up default values
         if(!Core.settings.has("item-" + Items.copper.name)){
-           addItem(Items.copper, 300);
+            addItem(Items.copper, 50);
         }
     }
 

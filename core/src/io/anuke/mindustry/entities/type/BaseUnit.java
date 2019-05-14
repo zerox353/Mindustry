@@ -12,13 +12,12 @@ import io.anuke.arc.math.geom.Rectangle;
 import io.anuke.arc.util.Interval;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.Vars;
+import io.anuke.mindustry.content.StatusEffects;
 import io.anuke.mindustry.entities.EntityGroup;
 import io.anuke.mindustry.entities.Units;
 import io.anuke.mindustry.entities.traits.ShooterTrait;
 import io.anuke.mindustry.entities.traits.TargetTrait;
-import io.anuke.mindustry.entities.units.StateMachine;
-import io.anuke.mindustry.entities.units.UnitDrops;
-import io.anuke.mindustry.entities.units.UnitState;
+import io.anuke.mindustry.entities.units.*;
 import io.anuke.mindustry.game.Team;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.net.Net;
@@ -26,18 +25,17 @@ import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.meta.BlockFlag;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.*;
 
-/**Base class for AI units.*/
+/** Base class for AI units. */
 public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     protected static int timerIndex = 0;
 
     protected static final int timerTarget = timerIndex++;
+    protected static final int timerTarget2 = timerIndex++;
     protected static final int timerShootLeft = timerIndex++;
     protected static final int timerShootRight = timerIndex++;
 
@@ -48,7 +46,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     protected int spawner = noSpawner;
 
-    /**internal constructor used for deserialization, DO NOT USE*/
+    /** internal constructor used for deserialization, DO NOT USE */
     public BaseUnit(){
     }
 
@@ -62,6 +60,16 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
         unit.onSuperDeath();
 
+        //visual only.
+        if(Net.client()){
+            Tile tile = world.tile(unit.spawner);
+            if(tile != null && !Net.client()){
+                tile.block().unitRemoved(tile, unit);
+            }
+
+            unit.spawner = noSpawner;
+        }
+
         //must run afterwards so the unit's group is not null when sending the removal packet
         Core.app.post(unit::remove);
     }
@@ -71,7 +79,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
         return type.drag;
     }
 
-    /**Initialize the type and team of this unit. Only call once!*/
+    /** Initialize the type and team of this unit. Only call once! */
     public void init(UnitType type, Team team){
         if(this.type != null) throw new RuntimeException("This unit is already initialized!");
 
@@ -92,7 +100,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     }
 
     public boolean targetHasFlag(BlockFlag flag){
-        return target instanceof TileEntity && ((TileEntity) target).tile.block().flags.contains(flag);
+        return target instanceof TileEntity && ((TileEntity)target).tile.block().flags.contains(flag);
     }
 
     public void setState(UnitState state){
@@ -105,14 +113,14 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
         }
     }
 
-    /**Only runs when the unit has a target.*/
+    /** Only runs when the unit has a target. */
     public void behavior(){
 
     }
 
     public void updateTargeting(){
         if(target == null || (target instanceof Unit && (target.isDead() || target.getTeam() == team))
-        || (target instanceof TileEntity && ((TileEntity) target).tile.entity == null)){
+        || (target instanceof TileEntity && ((TileEntity)target).tile.entity == null)){
             target = null;
         }
     }
@@ -128,7 +136,10 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     }
 
     public void targetClosest(){
-        target = Units.getClosestTarget(team, x, y, Math.max(getWeapon().bullet.range(), type.range), u -> type.targetAir || !u.isFlying());
+        TargetTrait newTarget = Units.closestTarget(team, x, y, Math.max(getWeapon().bullet.range(), type.range), u -> type.targetAir || !u.isFlying());
+        if(newTarget != null){
+            target = newTarget;
+        }
     }
 
     public TileEntity getClosestEnemyCore(){
@@ -156,11 +167,20 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
                 float angT = i == 0 ? 0 : Mathf.randomSeedRange(i + 2, 60f);
                 float lenT = i == 0 ? 0 : Mathf.randomSeedRange(i + 3, 1f) - 1f;
                 Draw.rect(item.item.icon(Item.Icon.large),
-                    x + Angles.trnsx(rotation + 180f + angT, backTrns + lenT),
-                    y + Angles.trnsy(rotation + 180f + angT, backTrns + lenT),
-                    itemSize, itemSize, rotation);
+                x + Angles.trnsx(rotation + 180f + angT, backTrns + lenT),
+                y + Angles.trnsy(rotation + 180f + angT, backTrns + lenT),
+                itemSize, itemSize, rotation);
             }
         }
+    }
+
+    public boolean isBoss(){
+        return hasEffect(StatusEffects.boss);
+    }
+
+    @Override
+    public float getDamageMultipler(){
+        return status.getDamageMultiplier() * Vars.state.rules.unitDamageMultiplier;
     }
 
     @Override
@@ -209,12 +229,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     @Override
     public float maxHealth(){
-        return type.health;
-    }
-
-    @Override
-    public float getSize(){
-        return 8;
+        return type.health * Vars.state.rules.unitHealthMultiplier;
     }
 
     @Override
@@ -229,11 +244,13 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     @Override
     public void update(){
-        hitTime -= Time.delta();
-
         if(isDead()){
+            //dead enemies should get immediately removed
+            remove();
             return;
         }
+
+        hitTime -= Time.delta();
 
         if(Net.client()){
             interpolate();
@@ -241,10 +258,14 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
             return;
         }
 
-        avoidOthers(1.25f);
+        if(!isFlying() && (world.tileWorld(x, y) != null && world.tileWorld(x, y).solid())){
+            kill();
+        }
+
+        avoidOthers();
 
         if(spawner != noSpawner && (world.tile(spawner) == null || world.tile(spawner).entity == null)){
-            damage(health);
+            kill();
         }
 
         updateTargeting();
@@ -271,8 +292,9 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     @Override
     public void removed(){
+        super.removed();
         Tile tile = world.tile(spawner);
-        if(tile != null){
+        if(tile != null && !Net.client()){
             tile.block().unitRemoved(tile, this);
         }
 
@@ -312,6 +334,11 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     }
 
     @Override
+    public byte version(){
+        return 0;
+    }
+
+    @Override
     public void writeSave(DataOutput stream) throws IOException{
         super.writeSave(stream);
         stream.writeByte(type.id);
@@ -319,8 +346,8 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     }
 
     @Override
-    public void readSave(DataInput stream) throws IOException{
-        super.readSave(stream);
+    public void readSave(DataInput stream, byte version) throws IOException{
+        super.readSave(stream, version);
         byte type = stream.readByte();
         this.spawner = stream.readInt();
 
@@ -332,16 +359,22 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     public void write(DataOutput data) throws IOException{
         super.writeSave(data);
         data.writeByte(type.id);
+        data.writeInt(spawner);
     }
 
     @Override
     public void read(DataInput data) throws IOException{
         float lastx = x, lasty = y, lastrot = rotation;
-        super.readSave(data);
+
+        super.readSave(data, version());
+
         this.type = content.getByID(ContentType.unit, data.readByte());
+        this.spawner = data.readInt();
 
         interpolator.read(lastx, lasty, x, y, rotation);
         rotation = lastrot;
+        x = lastx;
+        y = lasty;
     }
 
     public void onSuperDeath(){

@@ -1,34 +1,30 @@
 package io.anuke.mindustry.server;
 
-import io.anuke.arc.ApplicationListener;
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
+import io.anuke.arc.*;
 import io.anuke.arc.collection.Array;
+import io.anuke.arc.collection.Array.ArrayIterable;
 import io.anuke.arc.collection.ObjectSet;
-import io.anuke.mindustry.entities.Effects;
 import io.anuke.arc.files.FileHandle;
 import io.anuke.arc.util.*;
-import io.anuke.arc.util.CommandHandler.Command;
-import io.anuke.arc.util.CommandHandler.Response;
-import io.anuke.arc.util.CommandHandler.ResponseType;
+import io.anuke.arc.util.CommandHandler.*;
 import io.anuke.arc.util.Timer.Task;
 import io.anuke.mindustry.core.GameState.State;
+import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.game.Difficulty;
+import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.game.EventType.GameOverEvent;
-import io.anuke.mindustry.game.RulePreset;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.game.Version;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.io.SaveIO;
 import io.anuke.mindustry.maps.Map;
+import io.anuke.mindustry.maps.MapException;
 import io.anuke.mindustry.net.Administration.PlayerInfo;
 import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.net.Packets.KickReason;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.ItemType;
 
-import java.io.IOException;
+import java.io.*;
+import java.net.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Scanner;
@@ -40,6 +36,7 @@ public class ServerControl implements ApplicationListener{
     private static final int roundExtraTime = 12;
     //in bytes: 512 kb is max
     private static final int maxLogLength = 1024 * 512;
+    private static final int commandSocketPort = 6859;
 
     private final CommandHandler handler = new CommandHandler("");
     private final FileHandle logFolder = Core.files.local("logs/");
@@ -48,6 +45,8 @@ public class ServerControl implements ApplicationListener{
     private boolean inExtraRound;
     private Task lastTask;
 
+    private Thread socketThread;
+    private PrintWriter socketOutput;
 
     public ServerControl(String[] args){
         Core.settings.defaults(
@@ -57,7 +56,8 @@ public class ServerControl implements ApplicationListener{
             "shuffle", true,
             "crashreport", false,
             "port", port,
-            "logging", true
+            "logging", true,
+            "socket", false
         );
 
         Log.setLogger(new LogHandler(){
@@ -65,7 +65,7 @@ public class ServerControl implements ApplicationListener{
 
             @Override
             public void debug(String text, Object... args){
-                print("&lc&fb" + "[DEBUG] " + text, args);
+                print("&lc&fb" + "[DEBG] " + text, args);
             }
 
             @Override
@@ -91,6 +91,14 @@ public class ServerControl implements ApplicationListener{
                 if(Core.settings.getBool("logging")){
                     logToFile("[" + dateTime.format(LocalDateTime.now()) + "] " + format(text + "&fr", false, args));
                 }
+
+                if(socketOutput != null){
+                    try{
+                        socketOutput.println(format(text + "&fr", false, args).replace("[DEBG] ", "").replace("[WARN] ", "").replace("[INFO] ", "").replace("[ERR!] ", ""));
+                    }catch(Throwable e){
+                        err("Error occurred logging to socket: {0}", e.getClass().getSimpleName());
+                    }
+                }
             }
         });
 
@@ -105,7 +113,7 @@ public class ServerControl implements ApplicationListener{
 
             if(args.length > 0){
                 commands = Strings.join(" ", args).split(",");
-                info("&lmFound {0} command-line arguments to parse. {1}", commands.length);
+                info("&lmFound {0} command-line arguments to parse.", commands.length);
             }
 
             for(String s : commands){
@@ -141,15 +149,17 @@ public class ServerControl implements ApplicationListener{
                     Map map = previous;
                     if(maps.size > 1){
                         while(map == previous) map = maps.random();
+                    }else if(!previous.custom && !world.maps.customMaps().isEmpty()){
+                        map = maps.first();
                     }
 
                     Call.onInfoMessage((state.rules.pvp
                     ? "[YELLOW]The " + event.winner.name() + " team is victorious![]" : "[SCARLET]Game over![]")
-                    + "\nNext selected map:[accent] "+map.name+"[]"
-                    + (map.meta.author() != null ? " by[accent] " + map.meta.author() + "[]" : "") + "."+
+                    + "\nNext selected map:[accent] " + map.name() + "[]"
+                    + (map.tags.containsKey("author") && !map.tags.get("author").trim().isEmpty() ? " by[accent] " + map.author() + "[]" : "") + "." +
                     "\nNew game begins in " + roundExtraTime + " seconds.");
 
-                    info("Selected next map to be {0}.", map.name);
+                    info("Selected next map to be {0}.", map.name());
 
                     Map fmap = map;
 
@@ -164,6 +174,10 @@ public class ServerControl implements ApplicationListener{
 
         info("&lcServer loaded. Type &ly'help'&lc for help.");
         System.out.print("> ");
+
+        if(Core.settings.getBool("socket")){
+            toggleSocket(true);
+        }
     }
 
     private void registerCommands(){
@@ -200,20 +214,20 @@ public class ServerControl implements ApplicationListener{
 
             if(lastTask != null) lastTask.cancel();
 
-            Map result = world.maps.all().find(map -> map.name.equalsIgnoreCase(arg[0]));
+            Map result = world.maps.all().find(map -> map.name().equalsIgnoreCase(arg[0].replace('_', ' ')) || map.name().equalsIgnoreCase(arg[0]));
 
             if(result == null){
                 err("No map with name &y'{0}'&lr found.", arg[0]);
                 return;
             }
 
-            RulePreset preset = RulePreset.survival;
+            Gamemode preset = Gamemode.survival;
 
             if(arg.length > 1){
                 try{
-                    preset = RulePreset.valueOf(arg[1]);
+                    preset = Gamemode.valueOf(arg[1]);
                 }catch(IllegalArgumentException e){
-                    err("No gamemode '{0}' found.");
+                    err("No gamemode '{0}' found.", arg[1]);
                     return;
                 }
             }
@@ -221,13 +235,17 @@ public class ServerControl implements ApplicationListener{
             info("Loading map...");
 
             logic.reset();
-            state.rules = preset.get();
-            world.loadMap(result);
-            logic.play();
+            state.rules = preset.apply(result.rules());
+            try{
+                world.loadMap(result);
+                logic.play();
 
-            info("Map loaded.");
+                info("Map loaded.");
 
-            host();
+                host();
+            }catch(MapException e){
+                Log.err(e.map.name() + ": " + e.getMessage());
+            }
         });
 
         handler.register("port", "[port]", "Sets or displays the port for hosting the server.", arg -> {
@@ -249,7 +267,7 @@ public class ServerControl implements ApplicationListener{
             if(!world.maps.all().isEmpty()){
                 info("Maps:");
                 for(Map map : world.maps.all()){
-                    info("  &ly{0}: &lb&fi{1} / {2}x{3}", map.name, map.custom ? "Custom" : "Default", map.meta.width, map.meta.height);
+                    info("  &ly{0}: &lb&fi{1} / {2}x{3}", map.name(), map.custom ? "Custom" : "Default", map.width, map.height);
                 }
             }else{
                 info("No maps found.");
@@ -257,20 +275,30 @@ public class ServerControl implements ApplicationListener{
             info("&lyMap directory: &lb&fi{0}", customMapDirectory.file().getAbsoluteFile().toString());
         });
 
+        handler.register("reloadmaps", "Reload all maps from disk.", arg -> {
+            int beforeMaps = world.maps.all().size;
+            world.maps.reload();
+            if(world.maps.all().size > beforeMaps){
+                info("&lc{0}&ly new map(s) found and reloaded.", world.maps.all().size - beforeMaps);
+            }else{
+                info("&lyMaps reloaded.");
+            }
+        });
+
         handler.register("status", "Display server status.", arg -> {
             if(state.is(State.menu)){
                 info("Status: &rserver closed");
             }else{
                 info("Status:");
-                info("  &lyPlaying on map &fi{0}&fb &lb/&ly Wave {1}", Strings.capitalize(world.getMap().name), state.wave);
+                info("  &lyPlaying on map &fi{0}&fb &lb/&ly Wave {1}", Strings.capitalize(world.getMap().name()), state.wave);
 
                 if(state.rules.waves){
                     info("&ly  {0} enemies.", unitGroups[Team.red.ordinal()].size());
                 }else{
-                    info("&ly  {0} seconds until next wave.", (int) (state.wavetime / 60));
+                    info("&ly  {0} seconds until next wave.", (int)(state.wavetime / 60));
                 }
 
-                info("  &ly{0} FPS, {1} MB used.", (int)(60f/Time.delta()), Core.app.getJavaHeap() / 1024 / 1024);
+                info("  &ly{0} FPS, {1} MB used.", (int)(60f / Time.delta()), Core.app.getJavaHeap() / 1024 / 1024);
 
                 if(playerGroup.size() > 0){
                     info("  &lyPlayers: {0}", playerGroup.size());
@@ -296,19 +324,19 @@ public class ServerControl implements ApplicationListener{
 
         handler.register("difficulty", "<difficulty>", "Set game difficulty.", arg -> {
             try{
-                state.rules.waveSpacing = Difficulty.valueOf(arg[0]).waveTime;
+                state.rules.waveSpacing = Difficulty.valueOf(arg[0]).waveTime * 60 * 60 * 2;
                 info("Difficulty set to '{0}'.", arg[0]);
             }catch(IllegalArgumentException e){
                 err("No difficulty with name '{0}' found.", arg[0]);
             }
         });
 
-        handler.register("fillitems", "[team]", "Fill the core with 2000 items.", arg -> {
+        handler.register("fillitems", "[team]", "Fill the core with items.", arg -> {
             if(!state.is(State.playing)){
                 err("Not playing. Host first.");
                 return;
             }
-            
+
             try{
                 Team team = arg.length == 0 ? Team.blue : Team.valueOf(arg[0]);
 
@@ -316,17 +344,27 @@ public class ServerControl implements ApplicationListener{
                     err("That team has no cores.");
                     return;
                 }
-                
+
                 for(Item item : content.items()){
                     if(item.type == ItemType.material){
-                        state.teams.get(team).cores.first().entity.items.add(item, 2000);
+                        state.teams.get(team).cores.first().entity.items.set(item, state.teams.get(team).cores.first().block().itemCapacity);
                     }
                 }
-                
+
                 info("Core filled.");
             }catch(IllegalArgumentException ignored){
                 err("No such team exists.");
             }
+        });
+
+        handler.register("name", "[name...]", "Change the server display name.", arg -> {
+            if(arg.length == 0){
+                info("Server name is currently &lc'{0}'.", Core.settings.getString("servername"));
+                return;
+            }
+            Core.settings.put("servername", arg[0]);
+            Core.settings.save();
+            info("Server name is now &lc'{0}'.", arg[0]);
         });
 
         handler.register("crashreport", "<on/off>", "Disables or enables automatic crash reporting", arg -> {
@@ -344,9 +382,22 @@ public class ServerControl implements ApplicationListener{
         });
 
         handler.register("strict", "<on/off>", "Disables or enables strict mode", arg -> {
-           boolean value = arg[0].equalsIgnoreCase("on");
-           netServer.admins.setStrict(value);
-           info("Strict mode is now {0}.", netServer.admins.getStrict() ? "on" : "off");
+            boolean value = arg[0].equalsIgnoreCase("on");
+            netServer.admins.setStrict(value);
+            info("Strict mode is now {0}.", netServer.admins.getStrict() ? "on" : "off");
+        });
+
+        handler.register("socketinput", "[on/off]", "Disables or enables a local TCP socket at port "+commandSocketPort+" to recieve commands from other applications", arg -> {
+            if(arg.length == 0){
+                info("Socket input is currently &lc{0}.", Core.settings.getBool("socket") ? "on" : "off");
+                return;
+            }
+
+            boolean value = arg[0].equalsIgnoreCase("on");
+            toggleSocket(value);
+            Core.settings.put("socket", value);
+            Core.settings.save();
+            info("Socket input is now &lc{0}.", value ? "on" : "off");
         });
 
         handler.register("allow-custom-clients", "[on/off]", "Allow or disallow custom clients.", arg -> {
@@ -534,12 +585,16 @@ public class ServerControl implements ApplicationListener{
             int slot = Strings.parseInt(arg[0]);
 
             if(!SaveIO.isSaveValid(slot)){
-                err("No save data found for slot.");
+                err("No (valid) save data found for slot.");
                 return;
             }
 
             Core.app.post(() -> {
-                SaveIO.loadFromSlot(slot);
+                try{
+                    SaveIO.loadFromSlot(slot);
+                }catch(Throwable t){
+                    err("Failed to load save. Outdated or corrupt file.");
+                }
                 info("Save loaded.");
                 host();
                 state.set(State.playing);
@@ -582,7 +637,7 @@ public class ServerControl implements ApplicationListener{
 
                 int i = 0;
                 for(PlayerInfo info : infos){
-                    info("&lc[{0}] Trace info for player '{1}' / UUID {2}", i ++, info.lastName, info.id);
+                    info("&lc[{0}] Trace info for player '{1}' / UUID {2}", i++, info.lastName, info.id);
                     info("  &lyall names used: {0}", info.names);
                     info("  &lyIP: {0}", info.lastIP);
                     info("  &lyall IPs used: {0}", info.ips);
@@ -600,37 +655,38 @@ public class ServerControl implements ApplicationListener{
         Scanner scan = new Scanner(System.in);
         while(scan.hasNext()){
             String line = scan.nextLine();
-
-            Core.app.post(() -> {
-                Response response = handler.handleMessage(line);
-
-                if(response.type == ResponseType.unknownCommand){
-
-                    int minDst = 0;
-                    Command closest = null;
-
-                    for(Command command : handler.getCommandList()){
-                        int dst = Strings.levenshtein(command.text, response.runCommand);
-                        if(dst < 3 && (closest == null || dst < minDst)){
-                            minDst = dst;
-                            closest = command;
-                        }
-                    }
-
-                    if(closest != null){
-                        err("Command not found. Did you mean \"" + closest.text + "\"?");
-                    }else{
-                        err("Invalid command. Type 'help' for help.");
-                    }
-                }else if(response.type == ResponseType.fewArguments){
-                    err("Too few command arguments. Usage: " + response.command.text + " " + response.command.paramText);
-                }else if(response.type == ResponseType.manyArguments){
-                    err("Too many command arguments. Usage: " + response.command.text + " " + response.command.paramText);
-                }
-
-                System.out.print("> ");
-            });
+            Core.app.post(() -> handleCommandString(line));
         }
+    }
+
+    private void handleCommandString(String line){
+        Response response = handler.handleMessage(line);
+
+        if(response.type == ResponseType.unknownCommand){
+
+            int minDst = 0;
+            Command closest = null;
+
+            for(Command command : handler.getCommandList()){
+                int dst = Strings.levenshtein(command.text, response.runCommand);
+                if(dst < 3 && (closest == null || dst < minDst)){
+                    minDst = dst;
+                    closest = command;
+                }
+            }
+
+            if(closest != null){
+                err("Command not found. Did you mean \"" + closest.text + "\"?");
+            }else{
+                err("Invalid command. Type 'help' for help.");
+            }
+        }else if(response.type == ResponseType.fewArguments){
+            err("Too few command arguments. Usage: " + response.command.text + " " + response.command.paramText);
+        }else if(response.type == ResponseType.manyArguments){
+            err("Too many command arguments. Usage: " + response.command.text + " " + response.command.paramText);
+        }
+
+        System.out.print("> ");
     }
 
     private void play(boolean wait, Runnable run){
@@ -642,12 +698,17 @@ public class ServerControl implements ApplicationListener{
                 players.add(p);
                 p.setDead(true);
             }
+            Rules rules = state.rules;
             logic.reset();
+            state.rules = rules;
             Call.onWorldDataBegin();
             run.run();
             logic.play();
             for(Player p : players){
                 p.reset();
+                if(state.rules.pvp){
+                    p.setTeam(netServer.assignTeam(new ArrayIterable<>(players)));
+                }
                 netServer.sendWorldData(p, p.con.id);
             }
             inExtraRound = false;
@@ -657,7 +718,12 @@ public class ServerControl implements ApplicationListener{
             lastTask = new Task(){
                 @Override
                 public void run(){
-                    r.run();
+                    try{
+                        r.run();
+                    }catch(MapException e){
+                        Log.err(e.map.name() + ": " + e.getMessage());
+                        Net.closeServer();
+                    }
                 }
             };
 
@@ -671,6 +737,9 @@ public class ServerControl implements ApplicationListener{
         try{
             Net.host(Core.settings.getInt("port"));
             info("&lcOpened a server on port {0}.", Core.settings.getInt("port"));
+        }catch(BindException e){
+            Log.err("Unable to host: Port already in use! Make sure no other servers are running on the same port in your network.");
+            state.set(State.menu);
         }catch(IOException e){
             err(e);
             state.set(State.menu);
@@ -680,19 +749,55 @@ public class ServerControl implements ApplicationListener{
     private void logToFile(String text){
         if(currentLogFile != null && currentLogFile.length() > maxLogLength){
             String date = DateTimeFormatter.ofPattern("MM-dd-yyyy | HH:mm:ss").format(LocalDateTime.now());
-            currentLogFile.writeString("[End of log file. Date: "+ date + "]\n", true);
+            currentLogFile.writeString("[End of log file. Date: " + date + "]\n", true);
             currentLogFile = null;
         }
 
         if(currentLogFile == null){
             int i = 0;
             while(logFolder.child("log-" + i + ".txt").length() >= maxLogLength){
-                i ++;
+                i++;
             }
 
             currentLogFile = logFolder.child("log-" + i + ".txt");
         }
 
         currentLogFile.writeString(text + "\n", true);
+    }
+
+    private void toggleSocket(boolean on){
+        if(on && socketThread == null){
+            socketThread = new Thread(() -> {
+                try{
+                    try(ServerSocket socket = new ServerSocket()){
+                        socket.bind(new InetSocketAddress("localhost", commandSocketPort));
+                        while(true){
+                            Socket client = socket.accept();
+                            info("&lmRecieved command socket connection: &lb{0}", socket.getLocalSocketAddress());
+                            BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
+                            socketOutput = new PrintWriter(client.getOutputStream(), true);
+                            String line;
+                            while(client.isConnected() && (line = in.readLine()) != null){
+                                String result = line;
+                                Core.app.post(() -> handleCommandString(result));
+                            }
+                            info("&lmLost command socket connection: &lb{0}", socket.getLocalSocketAddress());
+                            socketOutput = null;
+                        }
+                    }
+                }catch(BindException b){
+                    err("Command input socket already in use. Is another instance of the server running?");
+                }catch(IOException e){
+                    err("Terminating socket server.");
+                    e.printStackTrace();
+                }
+            });
+            socketThread.setDaemon(true);
+            socketThread.start();
+        }else if(socketThread != null){
+            socketThread.interrupt();
+            socketThread = null;
+            socketOutput = null;
+        }
     }
 }

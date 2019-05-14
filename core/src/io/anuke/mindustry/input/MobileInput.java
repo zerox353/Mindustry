@@ -2,39 +2,31 @@ package io.anuke.mindustry.input;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.ObjectSet;
+import io.anuke.arc.function.BooleanProvider;
 import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Lines;
-import io.anuke.arc.graphics.g2d.TextureRegion;
+import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.input.GestureDetector;
 import io.anuke.arc.input.GestureDetector.GestureListener;
 import io.anuke.arc.input.KeyCode;
 import io.anuke.arc.math.Interpolation;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.math.geom.Point2;
-import io.anuke.arc.math.geom.Rectangle;
-import io.anuke.arc.math.geom.Vector2;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.actions.Actions;
+import io.anuke.arc.scene.event.Touchable;
 import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Align;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.content.Blocks;
 import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.core.GameState.State;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.Units;
 import io.anuke.mindustry.entities.traits.TargetTrait;
-import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.entities.type.Unit;
 import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.graphics.Shaders;
 import io.anuke.mindustry.input.PlaceUtils.NormalizeDrawResult;
 import io.anuke.mindustry.input.PlaceUtils.NormalizeResult;
-import io.anuke.mindustry.ui.dialogs.FloatingDialog;
 import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Block.Icon;
 import io.anuke.mindustry.world.Tile;
 
 import static io.anuke.mindustry.Vars.*;
@@ -50,9 +42,8 @@ public class MobileInput extends InputHandler implements GestureListener{
     //gesture data
     private Vector2 vector = new Vector2();
     private float lastDistance = -1f;
-    private boolean canPan;
     /** Set of completed guides. */
-    private ObjectSet<String> guides = new ObjectSet<>();
+    //private ObjectSet<String> guides = new ObjectSet<>();
 
     /** Position where the player started dragging a line. */
     private int lineStartX, lineStartY;
@@ -62,6 +53,8 @@ public class MobileInput extends InputHandler implements GestureListener{
     /** Animation data for crosshair. */
     private float crosshairScale;
     private TargetTrait lastTarget;
+    /** Used for shifting build requests. */
+    private float shiftDeltaX, shiftDeltaY;
 
     /** List of currently selected tiles to place. */
     private Array<PlaceRequest> selection = new Array<>();
@@ -78,8 +71,9 @@ public class MobileInput extends InputHandler implements GestureListener{
     /** Last placed request. Used for drawing block overlay. */
     private PlaceRequest lastPlaced;
 
-    public MobileInput(Player player){
-        super(player);
+    private int prevX, prevY, prevRotation;
+
+    public MobileInput(){
         Core.input.addProcessor(new GestureDetector(20, 0.5f, 0.4f, 0.15f, this));
     }
 
@@ -87,14 +81,13 @@ public class MobileInput extends InputHandler implements GestureListener{
 
     /** Check and assign targets for a specific position. */
     void checkTargets(float x, float y){
-        Unit unit = Units.getClosestEnemy(player.getTeam(), x, y, 20f, u -> !u.isDead());
+        Unit unit = Units.closestEnemy(player.getTeam(), x, y, 20f, u -> !u.isDead());
 
         if(unit != null){
             player.setMineTile(null);
             player.target = unit;
         }else{
-            Tile tile = world.tileWorld(x, y);
-            if(tile != null) tile = tile.target();
+            Tile tile = world.ltileWorld(x, y);
 
             if(tile != null && tile.synthetic() && state.teams.areEnemies(player.getTeam(), tile.getTeam())){
                 TileEntity entity = tile.entity;
@@ -167,61 +160,106 @@ public class MobileInput extends InputHandler implements GestureListener{
         removals.add(request);
     }
 
-    void drawRequest(PlaceRequest request){
+    void showGuide(String type, BooleanProvider done){
+        if(!Core.settings.getBool(type, false)){
+            Core.scene.table("guideDim", t -> {
+                t.margin(10f);
+                t.touchable(Touchable.disabled);
+                t.top().table("button", s -> s.add("$" + type).growX().wrap().labelAlign(Align.center, Align.center)).growX();
+                t.update(() -> {
+                    if((done.get() || state.is(State.menu)) && t.getUserObject() == null){
+                        t.actions(Actions.delay(1f), Actions.fadeOut(1f, Interpolation.fade), Actions.remove());
+                        t.setUserObject("ha");
+                    }
+                });
+            });
+            Core.settings.put(type, true);
+            data.modified();
+        }
+    }
+
+    boolean isLinePlacing(){
+        return mode == placing && lineMode && Mathf.dst(lineStartX * tilesize, lineStartY * tilesize, Core.input.mouseWorld().x, Core.input.mouseWorld().y) >= 3 * tilesize;
+    }
+
+    boolean isAreaBreaking(){
+        return mode == breaking && lineMode && Mathf.dst(lineStartX * tilesize, lineStartY * tilesize, Core.input.mouseWorld().x, Core.input.mouseWorld().y) >= 2 * tilesize;
+    }
+
+    //endregion
+    //region UI and drawing
+
+    void drawRequest(PlaceRequest request, PlaceRequest prev){
         Tile tile = request.tile();
 
         if(!request.remove){
+            if(prev != null){
+                request.block.getPlaceDraw(placeDraw, request.rotation, prev.x - request.x, prev.y - request.y, prev.rotation);
+            }else{
+                request.block.getPlaceDraw(placeDraw, request.rotation, 0, 0, request.rotation);
+            }
+
             //draw placing request
             float offset = request.block.offset();
-            TextureRegion region = request.block.icon(Icon.full);
+            TextureRegion region = placeDraw.region;
 
-            Draw.alpha(Mathf.clamp((1f - request.scale) / 0.5f));
+            Draw.mixcol(Pal.accent, Mathf.clamp((1f - request.scale) / 0.5f));
             Draw.tint(Color.WHITE, Pal.breakInvalid, request.redness);
 
             Draw.rect(region, tile.worldx() + offset, tile.worldy() + offset,
-            region.getWidth() * request.scale * Draw.scl,
-            region.getHeight() * request.scale * Draw.scl,
-            request.block.rotate ? request.rotation * 90 : 0);
+            region.getWidth() * request.scale * Draw.scl * placeDraw.scalex,
+            region.getHeight() * request.scale * Draw.scl * placeDraw.scaley,
+            request.block.rotate ? placeDraw.rotation * 90 : 0);
 
-            Draw.alpha(1f);
+            Draw.mixcol(Pal.accent, 1f);
             for(int i = 0; i < 4; i++){
                 Point2 p = Geometry.d8edge[i];
-                float poffset = -Math.max(request.block.size-1, 0)/2f * tilesize;
+                float poffset = -Math.max(request.block.size - 1, 0) / 2f * tilesize;
                 TextureRegion find = Core.atlas.find("block-select");
-                Draw.rect("block-select", request.tile().x * tilesize + request.block.offset() + poffset * p.x, request.tile().y * tilesize + request.block.offset() + poffset * p.y,
-                        find.getWidth() * Draw.scl * request.scale, find.getHeight() * Draw.scl * request.scale, i * 90);
+                if(i % 2 == 0)
+                    Draw.rect("block-select", request.tile().x * tilesize + request.block.offset() + poffset * p.x, request.tile().y * tilesize + request.block.offset() + poffset * p.y,
+                    find.getWidth() * Draw.scl * request.scale, find.getHeight() * Draw.scl * request.scale, i * 90);
             }
             Draw.color();
         }else{
-            float rad = (tile.block().size * tilesize / 2f - 1) * request.scale;
-            Draw.alpha(0f);
+            float rad = Math.max((tile.block().size * tilesize / 2f - 1) * request.scale, 1f);
+
+            if(rad <= 1.01f) return;
+            Draw.mixcol();
             //draw removing request
             Draw.tint(Pal.removeBack);
-            Lines.square(tile.drawx(), tile.drawy()-1, rad);
+            Lines.square(tile.drawx(), tile.drawy() - 1, rad);
             Draw.tint(Pal.remove);
             Lines.square(tile.drawx(), tile.drawy(), rad);
         }
     }
 
-    void showGuide(String type){
-        if(!guides.contains(type) && !Core.settings.getBool(type, false)){
-            FloatingDialog dialog = new FloatingDialog("$" + type + ".title");
-            dialog.addCloseButton();
-            dialog.cont.left();
-            dialog.cont.add("$" + type).growX().wrap();
-            dialog.cont.row();
-            dialog.cont.addCheck("$showagain", false, checked -> {
-                Core.settings.put(type, checked);
-                Core.settings.save();
-            }).growX().left().get().left();
-            dialog.show();
-            guides.add(type);
+    /** Draws a placement icon for a specific block. */
+    void drawPlace(int x, int y, Block block, int rotation, int prevX, int prevY, int prevRotation){
+        if(validPlace(x, y, block, rotation)){
+            block.getPlaceDraw(placeDraw, rotation, prevX, prevY, prevRotation);
+
+            Draw.color();
+            Draw.rect(placeDraw.region, x * tilesize + block.offset(), y * tilesize + block.offset(),
+            placeDraw.region.getWidth() * Draw.scl * placeDraw.scalex,
+            placeDraw.region.getHeight() * Draw.scl * placeDraw.scaley,
+            block.rotate ? placeDraw.rotation * 90 : 0);
+
+            Draw.color(Pal.accent);
+            for(int i = 0; i < 4; i++){
+                Point2 p = Geometry.d8edge[i];
+                float offset = -Math.max(block.size - 1, 0) / 2f * tilesize;
+                if(i % 2 == 0)
+                    Draw.rect("block-select", x * tilesize + block.offset() + offset * p.x, y * tilesize + block.offset() + offset * p.y, i * 90);
+            }
+            Draw.color();
+        }else{
+            Draw.color(Pal.removeBack);
+            Lines.square(x * tilesize + block.offset(), y * tilesize + block.offset() - 1, block.size * tilesize / 2f - 1);
+            Draw.color(Pal.remove);
+            Lines.square(x * tilesize + block.offset(), y * tilesize + block.offset(), block.size * tilesize / 2f - 1);
         }
     }
-
-    //endregion
-
-    //region UI and drawing
 
     @Override
     public void buildUI(Table table){
@@ -233,21 +271,19 @@ public class MobileInput extends InputHandler implements GestureListener{
             mode = mode == breaking ? block == null ? none : placing : breaking;
             lastBlock = block;
             if(mode == breaking){
-                showGuide("deconstruction");
+                showGuide("removearea", this::isAreaBreaking);
             }
         }).update(l -> l.setChecked(mode == breaking));
 
-        //cancel button
-        table.addImageButton("icon-cancel", "clear-partial", 16 * 2f, () -> {
-            player.clearBuilding();
-            mode = none;
-            block = null;
-        }).visible(() -> player.isBuilding() || block != null || mode == breaking);
+        //diagonal swap button
+        table.addImageButton("icon-diagonal", "clear-toggle-partial", 16 * 2f, () -> {
+            Core.settings.put("swapdiagonal", !Core.settings.getBool("swapdiagonal"));
+            Core.settings.save();
+        }).update(l -> l.setChecked(Core.settings.getBool("swapdiagonal")));
 
         //rotate button
         table.addImageButton("icon-arrow", "clear-partial", 16 * 2f, () -> rotation = Mathf.mod(rotation + 1, 4))
-        .update(i -> i.getImage().setRotationOrigin(rotation * 90, Align.center))
-        .visible(() -> block != null && block.rotate);
+        .update(i -> i.getImage().setRotationOrigin(rotation * 90, Align.center)).visible(() -> block != null && block.rotate);
 
         //confirm button
         table.addImageButton("icon-check", "clear-partial", 16 * 2f, () -> {
@@ -273,6 +309,15 @@ public class MobileInput extends InputHandler implements GestureListener{
             selection.clear();
             selecting = false;
         }).visible(() -> !selection.isEmpty());
+
+        Core.scene.table(t -> {
+           t.bottom().left().visible(() -> player.isBuilding() || block != null || mode == breaking);
+           t.addImageTextButton("$cancel", "icon-cancel", 16*2, () -> {
+               player.clearBuilding();
+               mode = none;
+               block = null;
+           }).width(155f);
+        });
     }
 
     @Override
@@ -289,9 +334,6 @@ public class MobileInput extends InputHandler implements GestureListener{
     public void drawOutlined(){
         Lines.stroke(1f);
 
-        Shaders.mix.color.set(Pal.accent);
-        Draw.shader(Shaders.mix);
-
         //draw removals
         for(PlaceRequest request : removals){
             Tile tile = request.tile();
@@ -301,8 +343,10 @@ public class MobileInput extends InputHandler implements GestureListener{
             request.scale = Mathf.lerpDelta(request.scale, 0f, 0.2f);
             request.redness = Mathf.lerpDelta(request.redness, 0f, 0.2f);
 
-            drawRequest(request);
+            drawRequest(request, null);
         }
+
+        PlaceRequest last = null;
 
         //draw list of requests
         for(PlaceRequest request : selection){
@@ -311,25 +355,34 @@ public class MobileInput extends InputHandler implements GestureListener{
             if(tile == null) continue;
 
             if((!request.remove && validPlace(tile.x, tile.y, request.block, request.rotation))
-                    || (request.remove && validBreak(tile.x, tile.y))){
+            || (request.remove && validBreak(tile.x, tile.y))){
                 request.scale = Mathf.lerpDelta(request.scale, 1f, 0.2f);
                 request.redness = Mathf.lerpDelta(request.redness, 0f, 0.2f);
             }else{
-                request.scale = Mathf.lerpDelta(request.scale, 0.5f, 0.1f);
-                request.redness = Mathf.lerpDelta(request.redness, 1f, 0.2f);
+                request.scale = Mathf.lerpDelta(request.scale, 0.6f, 0.1f);
+                request.redness = Mathf.lerpDelta(request.redness, 0.9f, 0.2f);
             }
 
+            Tmp.c1.set(Draw.getMixColor());
 
-            drawRequest(request);
+            if(!request.remove && request == lastPlaced && request.block != null){
+                Draw.mixcol();
+                if(request.block.rotate) drawArrow(request.block, tile.x, tile.y, request.rotation);
+            }
+
+            Draw.mixcol(Tmp.c1, 1f);
+            drawRequest(request, last);
 
             //draw last placed request
             if(!request.remove && request == lastPlaced && request.block != null){
+                Draw.mixcol();
                 request.block.drawPlace(tile.x, tile.y, rotation, validPlace(tile.x, tile.y, request.block, rotation));
             }
+
+            last = request;
         }
 
-        Draw.shader();
-
+        Draw.mixcol();
         Draw.color(Pal.accent);
 
         //Draw lines
@@ -337,44 +390,24 @@ public class MobileInput extends InputHandler implements GestureListener{
             int tileX = tileX(Core.input.mouseX());
             int tileY = tileY(Core.input.mouseY());
 
-            //draw placing
             if(mode == placing && block != null){
-                NormalizeDrawResult dresult = PlaceUtils.normalizeDrawArea(block, lineStartX, lineStartY, tileX, tileY, true, maxLength, lineScale);
+                //draw placing
 
-                Lines.rect(dresult.x, dresult.y, dresult.x2 - dresult.x, dresult.y2 - dresult.y);
+                prevX = lineStartX;
+                prevY = lineStartY;
+                prevRotation = rotation;
 
-                NormalizeResult result = PlaceUtils.normalizeArea(lineStartX, lineStartY, tileX, tileY, rotation, true, maxLength);
-
-                //go through each cell and draw the block to place if valid
-                for(int i = 0; i <= result.getLength(); i += block.size){
-                    int x = lineStartX + i * Mathf.sign(tileX - lineStartX) * Mathf.num(result.isX());
-                    int y = lineStartY + i * Mathf.sign(tileY - lineStartY) * Mathf.num(!result.isX());
-
-                    if(!checkOverlapPlacement(x, y, block) && validPlace(x, y, block, result.rotation)){
-                        Draw.color();
-
-                        TextureRegion region = block.icon(Icon.full);
-
-                        Draw.rect(region, x * tilesize + block.offset(), y * tilesize + block.offset(),
-                        region.getWidth() * lineScale * Draw.scl,
-                        region.getHeight() * lineScale * Draw.scl,
-                        block.rotate ? result.rotation * 90 : 0);
-
-                        Draw.color(Pal.accent);
-                        for(int j = 0; j < 4; j++){
-                            Point2 p = Geometry.d8edge[j];
-                            float offset = -Math.max(block.size-1, 0)/2f * tilesize;
-                            Draw.rect("block-select", x * tilesize + block.offset() + offset * p.x, y * tilesize + block.offset() + offset * p.y,j  * 90);
-                        }
-                        Draw.color();
-                    }else{
-                        Draw.color(Pal.removeBack);
-                        Lines.square(x * tilesize + block.offset(), y * tilesize + block.offset() - 1, block.size * tilesize / 2f);
-                        Draw.color(Pal.remove);
-                        Lines.square(x * tilesize + block.offset(), y * tilesize + block.offset(), block.size * tilesize / 2f);
+                iterateLine(lineStartX, lineStartY, tileX, tileY, l -> {
+                    if(l.last && block.rotate){
+                        drawArrow(block, l.x, l.y, l.rotation);
                     }
-                }
+                    drawPlace(l.x, l.y, block, l.rotation, prevX - l.x, prevY - l.y, prevRotation);
 
+                    rotation = l.rotation;
+                    prevX = l.x;
+                    prevY = l.y;
+                    prevRotation = l.rotation;
+                });
             }else if(mode == breaking){
                 //draw breaking
                 NormalizeDrawResult result = PlaceUtils.normalizeDrawArea(Blocks.air, lineStartX, lineStartY, tileX, tileY, false, maxLength, 1f);
@@ -382,12 +415,11 @@ public class MobileInput extends InputHandler implements GestureListener{
 
                 for(int x = dresult.x; x <= dresult.x2; x++){
                     for(int y = dresult.y; y <= dresult.y2; y++){
-                        Tile other = world.tile(x, y);
+                        Tile other = world.ltile(x, y);
                         if(other == null || !validBreak(other.x, other.y)) continue;
-                        other = other.target();
 
                         Draw.color(Pal.removeBack);
-                        Lines.square(other.drawx(), other.drawy()-1, other.block().size * tilesize / 2f - 1);
+                        Lines.square(other.drawx(), other.drawy() - 1, other.block().size * tilesize / 2f - 1);
                         Draw.color(Pal.remove);
                         Lines.square(other.drawx(), other.drawy(), other.block().size * tilesize / 2f - 1);
                     }
@@ -426,7 +458,6 @@ public class MobileInput extends InputHandler implements GestureListener{
     }
 
     //endregion
-
     //region input events
 
     @Override
@@ -460,28 +491,17 @@ public class MobileInput extends InputHandler implements GestureListener{
             int tileX = tileX(screenX);
             int tileY = tileY(screenY);
 
-            if(mode == placing && block != null){
-
-                //normalize area
-                NormalizeResult result = PlaceUtils.normalizeArea(lineStartX, lineStartY, tileX, tileY, rotation, true, 100);
-
-                rotation = result.rotation;
-
-                //place blocks on line
-                for(int i = 0; i <= result.getLength(); i += block.size){
-                    int x = lineStartX + i * Mathf.sign(tileX - lineStartX) * Mathf.num(result.isX());
-                    int y = lineStartY + i * Mathf.sign(tileY - lineStartY) * Mathf.num(!result.isX());
-
-                    if(!checkOverlapPlacement(x, y, block) && validPlace(x, y, block, result.rotation)){
-                        PlaceRequest request = new PlaceRequest(x * tilesize + block.offset(), y * tilesize + block.offset(), block, result.rotation);
-                        request.scale = 1f;
-                        selection.add(request);
+            if(mode == placing && isPlacing()){
+                iterateLine(lineStartX, lineStartY, tileX, tileY, l -> {
+                    Tile tile = world.tile(l.x, l.y);
+                    if(tile != null && hasRequest(tile)){
+                        return;
                     }
-                }
 
-                //reset last placed for convenience
-                lastPlaced = null;
-
+                    PlaceRequest request = new PlaceRequest(l.x, l.y, block, l.rotation);
+                    request.scale = 1f;
+                    selection.add(request);
+                });
             }else if(mode == breaking){
                 //normalize area
                 NormalizeResult result = PlaceUtils.normalizeArea(lineStartX, lineStartY, tileX, tileY, rotation, false, maxLength);
@@ -492,14 +512,12 @@ public class MobileInput extends InputHandler implements GestureListener{
                         int wx = lineStartX + x * Mathf.sign(tileX - lineStartX);
                         int wy = lineStartY + y * Mathf.sign(tileY - lineStartY);
 
-                        Tile tar = world.tile(wx, wy);
+                        Tile tar = world.ltile(wx, wy);
 
                         if(tar == null) continue;
 
-                        tar = tar.target();
-
                         if(!hasRequest(world.tile(tar.x, tar.y)) && validBreak(tar.x, tar.y)){
-                            PlaceRequest request = new PlaceRequest(tar.worldx(), tar.worldy());
+                            PlaceRequest request = new PlaceRequest(tar.x, tar.y);
                             request.scale = 1f;
                             selection.add(request);
                         }
@@ -513,7 +531,7 @@ public class MobileInput extends InputHandler implements GestureListener{
 
             if(tile == null) return false;
 
-            tryDropItems(tile.target(), Core.input.mouseWorld(screenX, screenY).x, Core.input.mouseWorld(screenX, screenY).y);
+            tryDropItems(tile.link(), Core.input.mouseWorld(screenX, screenY).x, Core.input.mouseWorld(screenX, screenY).y);
         }
         return false;
     }
@@ -562,12 +580,12 @@ public class MobileInput extends InputHandler implements GestureListener{
             removeRequest(getRequest(cursor));
         }else if(mode == placing && isPlacing() && validPlace(cursor.x, cursor.y, block, rotation) && !checkOverlapPlacement(cursor.x, cursor.y, block)){
             //add to selection queue if it's a valid place position
-            selection.add(lastPlaced = new PlaceRequest(cursor.worldx() + block.offset(), cursor.worldy() + block.offset(), block, rotation));
-        }else if(mode == breaking && validBreak(cursor.target().x, cursor.target().y) && !hasRequest(cursor.target())){
+            selection.add(lastPlaced = new PlaceRequest(cursor.x, cursor.y, block, rotation));
+        }else if(mode == breaking && validBreak(cursor.link().x, cursor.link().y) && !hasRequest(cursor.link())){
             //add to selection queue if it's a valid BREAK position
-            cursor = cursor.target();
-            selection.add(new PlaceRequest(cursor.worldx(), cursor.worldy()));
-        }else if(!canTapPlayer(worldx, worldy) && !tileTapped(cursor.target())){
+            cursor = cursor.link();
+            selection.add(new PlaceRequest(cursor.x, cursor.y));
+        }else if(!canTapPlayer(worldx, worldy) && !tileTapped(cursor.link())){
             tryBeginMine(cursor);
         }
 
@@ -600,7 +618,7 @@ public class MobileInput extends InputHandler implements GestureListener{
         }
 
         if(block != null){
-            showGuide("construction");
+            showGuide("placeline", this::isLinePlacing);
         }
 
         if(block == null && mode == placing){
@@ -638,7 +656,7 @@ public class MobileInput extends InputHandler implements GestureListener{
                     panY = (screenY - Core.graphics.getHeight()) + edgePan;
                 }
 
-                vector.set(panX, panY).scl((Core.camera.width ) / Core.graphics.getWidth());
+                vector.set(panX, panY).scl((Core.camera.width) / Core.graphics.getWidth());
                 vector.limit(maxPanSpeed);
 
                 //pan view
@@ -674,10 +692,21 @@ public class MobileInput extends InputHandler implements GestureListener{
         }
 
         if(selecting){ //pan all requests
-            for(PlaceRequest req : selection){
-                if(req.remove) continue; //don't shift removal requests
-                req.x += deltaX;
-                req.y += deltaY;
+            shiftDeltaX += deltaX;
+            shiftDeltaY += deltaY;
+
+            int shiftedX = (int)(shiftDeltaX / tilesize);
+            int shiftedY = (int)(shiftDeltaY / tilesize);
+
+            if(Math.abs(shiftedX) > 0 || Math.abs(shiftedY) > 0){
+                for(PlaceRequest req : selection){
+                    if(req.remove) continue; //don't shift removal requests
+                    req.x += shiftedX;
+                    req.y += shiftedY;
+                }
+
+                shiftDeltaX %= tilesize;
+                shiftDeltaY %= tilesize;
             }
         }else{
             //pan player
@@ -689,19 +718,30 @@ public class MobileInput extends InputHandler implements GestureListener{
     }
 
     @Override
+    public boolean panStop(float x, float y, int pointer, KeyCode button){
+        shiftDeltaX = shiftDeltaY = 0f;
+        return false;
+    }
+
+    @Override
     public boolean zoom(float initialDistance, float distance){
         if(lastDistance == -1) lastDistance = initialDistance;
 
-        float amount = (Mathf.sign(distance > lastDistance) * 0.07f) * Time.delta();
+        float amount = (Mathf.sign(distance > lastDistance) * 0.04f) * Time.delta();
         renderer.scaleCamera(io.anuke.arc.scene.ui.layout.Unit.dp.scl(amount));
         lastDistance = distance;
         return true;
     }
 
+    float clerp(float value, float min, float max){
+        final float alpha = 0.07f;
+        return value < min ? Mathf.lerpDelta(value, min, alpha) : value > max ? Mathf.lerpDelta(value, max, alpha) : value;
+    }
+
     //endregion
 
-    class PlaceRequest{
-        float x, y;
+    private class PlaceRequest{
+        int x, y;
         Block block;
         int rotation;
         boolean remove;
@@ -710,7 +750,7 @@ public class MobileInput extends InputHandler implements GestureListener{
         float scale;
         float redness;
 
-        PlaceRequest(float x, float y, Block block, int rotation){
+        PlaceRequest(int x, int y, Block block, int rotation){
             this.x = x;
             this.y = y;
             this.block = block;
@@ -718,14 +758,14 @@ public class MobileInput extends InputHandler implements GestureListener{
             this.remove = false;
         }
 
-        PlaceRequest(float x, float y){
+        PlaceRequest(int x, int y){
             this.x = x;
             this.y = y;
             this.remove = true;
         }
 
         Tile tile(){
-            return world.tileWorld(x - (block == null ? 0 : block.offset()), y - (block == null ? 0 : block.offset()));
+            return world.tile(x, y);
         }
     }
 }

@@ -7,10 +7,7 @@ import io.anuke.arc.collection.IntArray;
 import io.anuke.arc.collection.IntSet;
 import io.anuke.arc.collection.IntSet.IntSetIterator;
 import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.CapStyle;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Lines;
-import io.anuke.arc.graphics.g2d.TextureRegion;
+import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Geometry;
 import io.anuke.arc.util.Time;
@@ -20,28 +17,22 @@ import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.graphics.Layer;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Edges;
-import io.anuke.mindustry.world.Pos;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.*;
 import io.anuke.mindustry.world.meta.BlockGroup;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.tilesize;
 import static io.anuke.mindustry.Vars.world;
 
 public class ItemBridge extends Block{
-    protected static int lastPlaced;
-
     protected int timerTransport = timers++;
     protected int range;
     protected float transportTime = 2f;
     protected IntArray removals = new IntArray();
-
     protected TextureRegion endRegion, bridgeRegion, arrowRegion;
+
+    private static int lastPlaced = Pos.invalid;
 
     public ItemBridge(String name){
         super(name);
@@ -85,29 +76,45 @@ public class ItemBridge extends Block{
 
     @Override
     public void playerPlaced(Tile tile){
-        Tile last = world.tile(lastPlaced);
-        if(linkValid(tile, last)){
-            ItemBridgeEntity entity = last.entity();
-            if(!linkValid(last, world.tile(entity.link))){
-                Call.linkItemBridge(null, last, tile);
-            }
+        Tile link = findLink(tile.x, tile.y);
+        if(linkValid(tile, link)){
+            Call.linkItemBridge(null, link, tile);
         }
+
         lastPlaced = tile.pos();
+    }
+
+    public Tile findLink(int x, int y){
+        if(world.tile(x, y) != null && linkValid(world.tile(x, y), world.tile(lastPlaced)) && lastPlaced != Pos.get(x, y)){
+            return world.tile(lastPlaced);
+        }
+        return null;
     }
 
     @Override
     public void drawPlace(int x, int y, int rotation, boolean valid){
-        Lines.stroke(2f);
-        Draw.color(Pal.placing);
+        Tile link = findLink(x, y);
+
+        Lines.stroke(2f, Pal.placing);
         for(int i = 0; i < 4; i++){
             Lines.dashLine(
-                    x * tilesize + Geometry.d4[i].x * (tilesize / 2f + 2),
-                    y * tilesize + Geometry.d4[i].y * (tilesize / 2f + 2),
-                    x * tilesize + Geometry.d4[i].x * (range + 0.5f) * tilesize,
-                    y * tilesize + Geometry.d4[i].y * (range + 0.5f) * tilesize,
-                    range);
+            x * tilesize + Geometry.d4[i].x * (tilesize / 2f + 2),
+            y * tilesize + Geometry.d4[i].y * (tilesize / 2f + 2),
+            x * tilesize + Geometry.d4[i].x * (range + 0.5f) * tilesize,
+            y * tilesize + Geometry.d4[i].y * (range + 0.5f) * tilesize,
+            range);
         }
 
+        Draw.reset();
+        Draw.color(Pal.placing);
+        Lines.stroke(1f);
+        if(link != null){
+            int rot = link.absoluteRelativeTo(x, y);
+            float w = (link.x == x ? tilesize : Math.abs(link.x - x) * tilesize - tilesize);
+            float h = (link.y == y ? tilesize : Math.abs(link.y - y) * tilesize - tilesize);
+            Lines.rect((x + link.x) / 2f * tilesize - w / 2f, (y + link.y) / 2f * tilesize - h / 2f, w, h);
+            Fill.poly(link.x * tilesize + Geometry.d4[rot].x * tilesize, link.y * tilesize + Geometry.d4[rot].y * tilesize, 3, 2.8f, link.absoluteRelativeTo(x, y) * 90);
+        }
         Draw.reset();
     }
 
@@ -118,7 +125,7 @@ public class ItemBridge extends Block{
         Draw.color(Pal.accent);
         Lines.stroke(1f);
         Lines.square(tile.drawx(), tile.drawy(),
-                tile.block().size * tilesize / 2f + 1f);
+        tile.block().size * tilesize / 2f + 1f);
 
         for(int i = 1; i <= range; i++){
             for(int j = 0; j < 4; j++){
@@ -128,7 +135,7 @@ public class ItemBridge extends Block{
                     Draw.color(linked ? Pal.place : Pal.breakInvalid);
 
                     Lines.square(other.drawx(), other.drawy(),
-                            other.block().size * tilesize / 2f + 1f + (linked ? 0f : Mathf.absin(Time.time(), 4f, 1f)));
+                    other.block().size * tilesize / 2f + 1f + (linked ? 0f : Mathf.absin(Time.time(), 4f, 1f)));
                 }
             }
         }
@@ -175,6 +182,7 @@ public class ItemBridge extends Block{
 
         Tile other = world.tile(entity.link);
         if(!linkValid(tile, other)){
+            entity.link = Pos.invalid;
             tryDump(tile);
             entity.uptime = 0f;
         }else{
@@ -221,10 +229,10 @@ public class ItemBridge extends Block{
 
         Lines.stroke(8f);
         Lines.line(bridgeRegion,
-                tile.worldx(),
-                tile.worldy(),
-                other.worldx(),
-                other.worldy(), CapStyle.none, -tilesize / 2f);
+        tile.worldx(),
+        tile.worldy(),
+        other.worldx(),
+        other.worldy(), CapStyle.none, -tilesize / 2f);
 
         int dist = Math.max(Math.abs(other.x - tile.x), Math.abs(other.y - tile.y));
 
@@ -234,17 +242,17 @@ public class ItemBridge extends Block{
         Draw.color();
 
         for(int a = 0; a < arrows; a++){
-            Draw.alpha(Mathf.absin(a / (float) arrows - entity.time / 100f, 0.1f, 1f) * entity.uptime);
+            Draw.alpha(Mathf.absin(a / (float)arrows - entity.time / 100f, 0.1f, 1f) * entity.uptime);
             Draw.rect(arrowRegion,
-                    tile.worldx() + Geometry.d4[i].x * (tilesize / 2f + a * 4f + time % 4f),
-                    tile.worldy() + Geometry.d4[i].y * (tilesize / 2f + a * 4f + time % 4f), i * 90f);
+            tile.worldx() + Geometry.d4[i].x * (tilesize / 2f + a * 4f + time % 4f),
+            tile.worldy() + Geometry.d4[i].y * (tilesize / 2f + a * 4f + time % 4f), i * 90f);
         }
         Draw.reset();
     }
 
     @Override
     public boolean acceptItem(Item item, Tile tile, Tile source){
-        if(tile.getTeamID() != source.target().getTeamID()) return false;
+        if(tile.getTeam() != source.getTeam()) return false;
 
         ItemBridgeEntity entity = tile.entity();
         Tile other = world.tile(entity.link);
@@ -297,7 +305,7 @@ public class ItemBridge extends Block{
     }
 
     public boolean linkValid(Tile tile, Tile other, boolean checkDouble){
-        if(other == null) return false;
+        if(other == null || tile == null) return false;
         if(tile.x == other.x){
             if(Math.abs(tile.y - other.y) > range) return false;
         }else if(tile.y == other.y){
@@ -310,7 +318,7 @@ public class ItemBridge extends Block{
     }
 
     public static class ItemBridgeEntity extends TileEntity{
-        public int link = -1;
+        public int link = Pos.invalid;
         public IntSet incoming = new IntSet();
         public float uptime;
         public float time;
@@ -319,6 +327,7 @@ public class ItemBridge extends Block{
 
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeInt(link);
             stream.writeFloat(uptime);
             stream.writeByte(incoming.size);
@@ -331,7 +340,8 @@ public class ItemBridge extends Block{
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             link = stream.readInt();
             uptime = stream.readFloat();
             byte links = stream.readByte();

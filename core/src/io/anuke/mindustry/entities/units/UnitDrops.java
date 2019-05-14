@@ -1,12 +1,12 @@
 package io.anuke.mindustry.entities.units;
 
+import io.anuke.arc.math.Mathf;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.content.Items;
 import io.anuke.mindustry.entities.type.BaseUnit;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.type.Item;
-import io.anuke.arc.math.Mathf;
 
 public class UnitDrops{
     private static Item[] dropTable;
@@ -19,7 +19,7 @@ public class UnitDrops{
 
         TileEntity core = unit.getClosestEnemyCore();
 
-        if(core == null){
+        if(core == null || core.dst(unit) > Vars.mineTransferRange){
             return;
         }
 

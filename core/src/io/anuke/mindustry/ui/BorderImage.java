@@ -1,12 +1,10 @@
 package io.anuke.mindustry.ui;
 
 import io.anuke.arc.graphics.Texture;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Lines;
+import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.scene.ui.Image;
 import io.anuke.arc.scene.ui.layout.Unit;
+import io.anuke.mindustry.graphics.Pal;
 
 public class BorderImage extends Image{
     private float thickness = 3f;
@@ -37,6 +35,7 @@ public class BorderImage extends Image{
         float scaleY = getScaleY();
 
         Draw.color(Pal.accent);
+        Draw.alpha(parentAlpha);
         Lines.stroke(Unit.dp.scl(thickness));
         Lines.rect(x + imageX, y + imageY, imageWidth * scaleX, imageHeight * scaleY);
         Draw.reset();

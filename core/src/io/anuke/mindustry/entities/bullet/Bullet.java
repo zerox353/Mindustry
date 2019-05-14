@@ -2,25 +2,21 @@ package io.anuke.mindustry.entities.bullet;
 
 import io.anuke.annotations.Annotations.Loc;
 import io.anuke.annotations.Annotations.Remote;
-import io.anuke.mindustry.entities.EntityGroup;
-import io.anuke.mindustry.entities.impl.SolidEntity;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Rectangle;
 import io.anuke.arc.math.geom.Vector2;
-import io.anuke.arc.util.Interval;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.Tmp;
+import io.anuke.arc.util.*;
 import io.anuke.arc.util.pooling.Pool.Poolable;
 import io.anuke.arc.util.pooling.Pools;
+import io.anuke.mindustry.entities.EntityGroup;
+import io.anuke.mindustry.entities.effect.Lightning;
+import io.anuke.mindustry.entities.impl.SolidEntity;
 import io.anuke.mindustry.entities.traits.*;
 import io.anuke.mindustry.entities.type.Unit;
-import io.anuke.mindustry.entities.effect.Lightning;
 import io.anuke.mindustry.game.Team;
 import io.anuke.mindustry.world.Tile;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -36,7 +32,7 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
     protected Entity owner;
     protected float time;
 
-    /**Internal use only!*/
+    /** Internal use only! */
     public Bullet(){
     }
 
@@ -64,7 +60,7 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
 
         bullet.velocity.set(0, type.speed).setAngle(angle).scl(velocityScl);
         if(type.keepVelocity){
-            bullet.velocity.add(owner instanceof VelocityTrait ? ((VelocityTrait) owner).velocity() : Vector2.ZERO);
+            bullet.velocity.add(owner instanceof VelocityTrait ? ((VelocityTrait)owner).velocity() : Vector2.ZERO);
         }
 
         bullet.team = team;
@@ -85,10 +81,16 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
         return create(type, parent.owner, parent.team, x, y, angle, velocityScl);
     }
 
-    /**Internal use only.*/
-    @Remote(called = Loc.server)
+    /** Internal use only. */
+    @Remote(called = Loc.server, unreliable = true)
     public static void createBullet(BulletType type, float x, float y, float angle){
         create(type, null, Team.none, x, y, angle);
+    }
+
+    /** ok */
+    @Remote(called = Loc.server, unreliable = true)
+    public static void createBullet(BulletType type, Team team, float x, float y, float angle){
+        create(type, null, team, x, y, angle);
     }
 
     public Entity getOwner(){
@@ -125,6 +127,13 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
         this.data = data;
     }
 
+    public float damageMultiplier(){
+        if(owner instanceof Unit){
+            return ((Unit)owner).getDamageMultipler();
+        }
+        return 1f;
+    }
+
     @Override
     public void absorb(){
         supressCollision = true;
@@ -138,16 +147,10 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
 
     @Override
     public float damage(){
-        //todo hacky way to get damage, refactor
-        if(owner instanceof Unit){
-            return type.damage * ((Unit) owner).getDamageMultipler();
-        }
-
         if(owner instanceof Lightning && data instanceof Float){
             return (Float)data;
         }
-
-        return type.damage;
+        return type.damage * damageMultiplier();
     }
 
     @Override
@@ -187,7 +190,7 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
 
     @Override
     public boolean collides(SolidTrait other){
-        return type.collides && (other != owner && !(other instanceof DamageTrait)) && !supressCollision && !(other instanceof Unit && ((Unit) other).isFlying() && !type.collidesAir);
+        return type.collides && (other != owner && !(other instanceof DamageTrait)) && !supressCollision && !(other instanceof Unit && ((Unit)other).isFlying() && !type.collidesAir);
     }
 
     @Override
@@ -196,7 +199,7 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
         type.hit(this, x, y);
 
         if(other instanceof Unit){
-            Unit unit = (Unit) other;
+            Unit unit = (Unit)other;
             unit.velocity().add(Tmp.v3.set(other.getX(), other.getY()).sub(x, y).setLength(type.knockback / unit.mass()));
             unit.applyEffect(type.status, type.statusDuration);
         }
@@ -211,7 +214,7 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
 
         velocity.scl(Mathf.clamp(1f - type.drag * Time.delta()));
 
-        time += Time.delta() * 1f/(lifeScl);
+        time += Time.delta() * 1f / (lifeScl);
         time = Mathf.clamp(time, 0, type.lifetime);
 
         if(time >= type.lifetime){
@@ -222,9 +225,8 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
         if(type.hitTiles && collidesTiles() && !supressCollision && initialized){
             world.raycastEach(world.toTile(lastPosition().x), world.toTile(lastPosition().y), world.toTile(x), world.toTile(y), (x, y) -> {
 
-                Tile tile = world.tile(x, y);
+                Tile tile = world.ltile(x, y);
                 if(tile == null) return false;
-                tile = tile.target();
 
                 if(tile.entity != null && tile.entity.collide(this) && type.collides(this, tile) && !tile.entity.isDead() && (type.collidesTeam || tile.getTeam() != team)){
                     if(tile.getTeam() != team){
@@ -329,12 +331,12 @@ public class Bullet extends SolidEntity implements DamageTrait, ScaleTrait, Pool
         velocity.limit(f);
     }
 
-    /** Sets the bullet's rotation in degrees.*/
+    /** Sets the bullet's rotation in degrees. */
     public void rot(float angle){
         velocity.setAngle(angle);
     }
 
-    /** @return the bullet's rotation.*/
+    /** @return the bullet's rotation. */
     public float rot(){
         float angle = Mathf.atan2(velocity.x, velocity.y) * Mathf.radiansToDegrees;
         if(angle < 0) angle += 360;

@@ -2,10 +2,8 @@ package io.anuke.mindustry.io;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.util.I18NBundle;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.Vars;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.Log;
 import io.anuke.mindustry.input.Binding;
 
 import java.util.Locale;
@@ -39,6 +37,8 @@ public class BundleLoader{
     }
 
     private static void loadBundle(){
+        if(headless) return;
+
         try{
             //try loading external bundle
             FileHandle handle = Core.files.local("bundle");
@@ -57,7 +57,6 @@ public class BundleLoader{
 
             Locale locale = getLocale();
             Locale.setDefault(locale);
-            if(!headless) Log.info("Got locale: {0}", locale);
             Core.bundle = I18NBundle.createBundle(handle, locale);
         }
 

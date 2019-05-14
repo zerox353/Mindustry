@@ -1,19 +1,15 @@
 package io.anuke.mindustry.world.blocks.defense.turrets;
 
 import io.anuke.arc.collection.ObjectMap;
+import io.anuke.arc.collection.OrderedMap;
 import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.entities.bullet.BulletType;
 import io.anuke.mindustry.entities.effect.Fire;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.Liquid;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.values.LiquidFilterValue;
-
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import io.anuke.mindustry.world.meta.values.AmmoListValue;
 
 import static io.anuke.mindustry.Vars.tilesize;
 import static io.anuke.mindustry.Vars.world;
@@ -26,34 +22,34 @@ public abstract class LiquidTurret extends Turret{
         hasLiquids = true;
     }
 
-    /**Initializes accepted ammo map. Format: [liquid1, bullet1, liquid2, bullet2...]*/
+    /** Initializes accepted ammo map. Format: [liquid1, bullet1, liquid2, bullet2...] */
     protected void ammo(Object... objects){
-        ammo = ObjectMap.of(objects);
+        ammo = OrderedMap.of(objects);
     }
 
     @Override
     public void setStats(){
         super.setStats();
 
-        stats.add(BlockStat.inputLiquid, new LiquidFilterValue(item -> ammo.containsKey(item)));
+        stats.add(BlockStat.ammo, new AmmoListValue<>(ammo));
     }
 
     @Override
-    protected boolean validateTarget(Tile tile) {
+    protected boolean validateTarget(Tile tile){
         TurretEntity entity = tile.entity();
         if(entity.liquids.current().canExtinguish() && entity.target instanceof Tile){
-            return Fire.has(((Tile) entity.target).x, ((Tile) entity.target).y);
+            return Fire.has(((Tile)entity.target).x, ((Tile)entity.target).y);
         }
         return super.validateTarget(tile);
     }
 
     @Override
-    protected void findTarget(Tile tile) {
+    protected void findTarget(Tile tile){
         TurretEntity entity = tile.entity();
         if(entity.liquids.current().canExtinguish()){
             int tr = (int)(range / tilesize);
-            for (int x = -tr; x <= tr; x++) {
-                for (int y = -tr; y <= tr; y++) {
+            for(int x = -tr; x <= tr; x++){
+                for(int y = -tr; y <= tr; y++){
                     if(Fire.has(x + tile.x, y + tile.y)){
                         entity.target = world.tile(x + tile.x, y + tile.y);
                         return;
@@ -108,45 +104,8 @@ public abstract class LiquidTurret extends Turret{
 
     @Override
     public boolean acceptLiquid(Tile tile, Tile source, Liquid liquid, float amount){
-        return super.acceptLiquid(tile, source, liquid, amount) && ammo.get(liquid) != null
-                && (tile.entity.liquids.current() == liquid || (ammo.containsKey(tile.entity.liquids.current()) && tile.entity.liquids.get(tile.entity.liquids.current()) <= ammo.get(tile.entity.liquids.current()).ammoMultiplier + 0.001f));
-    }
-
-    public class LiquidTurretEntity extends TurretEntity{
-        @Override
-        public void write(DataOutput stream) throws IOException{
-            stream.writeByte(ammo.size);
-            for(AmmoEntry entry : ammo){
-                LiquidEntry i = (LiquidEntry)entry;
-                stream.writeByte(i.liquid.id);
-                stream.writeShort(i.amount);
-            }
-        }
-
-        @Override
-        public void read(DataInput stream) throws IOException{
-            byte amount = stream.readByte();
-            for(int i = 0; i < amount; i++){
-                Liquid liquid = Vars.content.liquid(stream.readByte());
-                short a = stream.readShort();
-                totalAmmo += a;
-                ammo.add(new LiquidEntry(liquid, a));
-            }
-        }
-    }
-
-    class LiquidEntry extends AmmoEntry{
-        protected Liquid liquid;
-
-        LiquidEntry(Liquid liquid, int amount){
-            this.liquid = liquid;
-            this.amount = amount;
-        }
-
-        @Override
-        public BulletType type(){
-            return ammo.get(liquid);
-        }
+        return ammo.get(liquid) != null
+        && (tile.entity.liquids.current() == liquid || (ammo.containsKey(tile.entity.liquids.current()) && tile.entity.liquids.get(tile.entity.liquids.current()) <= ammo.get(tile.entity.liquids.current()).ammoMultiplier + 0.001f));
     }
 
 }

@@ -1,7 +1,7 @@
 package io.anuke.mindustry.type;
 
-/**Do not rearrange, ever!*/
-public enum ContentType {
+/** Do not rearrange, ever! */
+public enum ContentType{
     item,
     block,
     mech,
@@ -11,5 +11,6 @@ public enum ContentType {
     unit,
     weather,
     effect,
-    zone
+    zone,
+    loadout
 }

@@ -2,26 +2,23 @@ package io.anuke.mindustry.game;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.Events;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.IntArray;
-import io.anuke.arc.collection.IntMap;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.util.Strings;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.core.GameState.State;
 import io.anuke.mindustry.game.EventType.StateChangeEvent;
 import io.anuke.mindustry.io.SaveIO;
 import io.anuke.mindustry.io.SaveIO.SaveException;
 import io.anuke.mindustry.io.SaveMeta;
 import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.type.ContentType;
 import io.anuke.mindustry.type.Zone;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import static io.anuke.mindustry.Vars.*;
+import static io.anuke.mindustry.Vars.saveExtension;
+import static io.anuke.mindustry.Vars.state;
 
 public class Saves{
     private int nextSlot;
@@ -48,13 +45,13 @@ public class Saves{
         saves.clear();
         IntArray slots = Core.settings.getObject("save-slots", IntArray.class, IntArray::new);
 
-        for(int i = 0; i < slots.size; i ++){
+        for(int i = 0; i < slots.size; i++){
             int index = slots.get(i);
             if(SaveIO.isSaveValid(index)){
                 SaveSlot slot = new SaveSlot(index);
                 saves.add(slot);
                 saveMap.put(slot.index, slot);
-                slot.meta = SaveIO.getData(index);
+                slot.meta = SaveIO.getMeta(index);
                 nextSlot = Math.max(index + 1, nextSlot);
             }
         }
@@ -68,7 +65,7 @@ public class Saves{
         SaveSlot current = this.current;
 
         if(current != null && !state.is(State.menu)
-            && !(state.isPaused() && Core.scene.hasDialog())){
+        && !(state.isPaused() && Core.scene.hasDialog())){
             if(lastTimestamp != 0){
                 totalPlaytime += Time.timeSinceMillis(lastTimestamp);
             }
@@ -136,7 +133,7 @@ public class Saves{
         slot.setName(file.nameWithoutExtension());
         saves.add(slot);
         saveMap.put(slot.index, slot);
-        slot.meta = SaveIO.getData(slot.index);
+        slot.meta = SaveIO.getMeta(slot.index);
         current = slot;
         saveSlots();
         return slot;
@@ -174,7 +171,7 @@ public class Saves{
         public void load() throws SaveException{
             try{
                 SaveIO.loadFromSlot(index);
-                meta = SaveIO.getData(index);
+                meta = SaveIO.getMeta(index);
                 current = this;
                 totalPlaytime = meta.timePlayed;
             }catch(Exception e){
@@ -188,7 +185,7 @@ public class Saves{
             totalPlaytime = time;
 
             SaveIO.saveToSlot(index);
-            meta = SaveIO.getData(index);
+            meta = SaveIO.getMeta(index);
             if(!state.is(State.menu)){
                 current = this;
             }
@@ -197,7 +194,7 @@ public class Saves{
         }
 
         public boolean isHidden(){
-            return false;
+            return getZone() != null;
         }
 
         public String getPlayTime(){
@@ -226,7 +223,7 @@ public class Saves{
         }
 
         public Zone getZone(){
-            return content.getByID(ContentType.zone, meta.rules.zone);
+            return meta == null || meta.rules == null ? null : meta.rules.zone;
         }
 
         public int getBuild(){

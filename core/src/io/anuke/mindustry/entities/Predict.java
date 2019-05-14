@@ -2,6 +2,7 @@ package io.anuke.mindustry.entities;
 
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Vector2;
+import io.anuke.arc.util.Time;
 import io.anuke.mindustry.entities.traits.TargetTrait;
 
 /**
@@ -13,7 +14,6 @@ public class Predict{
 
     /**
      * Calculates of intercept of a stationary and moving target. Do not call from multiple threads!
-     *
      * @param srcx X of shooter
      * @param srcy Y of shooter
      * @param dstx X of target
@@ -24,8 +24,10 @@ public class Predict{
      * @return the intercept location
      */
     public static Vector2 intercept(float srcx, float srcy, float dstx, float dsty, float dstvx, float dstvy, float v){
+        dstvx /= Time.delta();
+        dstvy /= Time.delta();
         float tx = dstx - srcx,
-                ty = dsty - srcy;
+        ty = dsty - srcy;
 
         // Get quadratic equation components
         float a = dstvx * dstvx + dstvy * dstvy - v * v;
@@ -36,7 +38,7 @@ public class Predict{
         Vector2 ts = quad(a, b, c);
 
         // Find smallest positive solution
-        Vector2 sol = vresult.set(0, 0);
+        Vector2 sol = vresult.set(dstx, dsty);
         if(ts != null){
             float t0 = ts.x, t1 = ts.y;
             float t = Math.min(t0, t1);
@@ -54,8 +56,8 @@ public class Predict{
      */
     public static Vector2 intercept(TargetTrait src, TargetTrait dst, float v){
         return intercept(src.getX(), src.getY(), dst.getX(), dst.getY(),
-            dst.getTargetVelocityX() - src.getTargetVelocityX(),
-            dst.getTargetVelocityY() - src.getTargetVelocityY(), v);
+        dst.getTargetVelocityX() - src.getTargetVelocityX(),
+        dst.getTargetVelocityY() - src.getTargetVelocityY(), v);
     }
 
     private static Vector2 quad(float a, float b, float c){

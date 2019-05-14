@@ -1,10 +1,12 @@
 package io.anuke.mindustry.world.blocks.power;
 
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Effects.Effect;
+import io.anuke.arc.Core;
 import io.anuke.arc.math.Mathf;
 import io.anuke.mindustry.content.Fx;
+import io.anuke.mindustry.entities.Effects;
+import io.anuke.mindustry.entities.Effects.Effect;
 import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.meta.Attribute;
 
 public class ThermalGenerator extends PowerGenerator{
     protected Effect generateEffect = Fx.none;
@@ -20,8 +22,11 @@ public class ThermalGenerator extends PowerGenerator{
         if(entity.productionEfficiency > 0.1f && Mathf.chance(0.05 * entity.delta())){
             Effects.effect(generateEffect, tile.drawx() + Mathf.range(3f), tile.drawy() + Mathf.range(3f));
         }
+    }
 
-        super.update(tile);
+    @Override
+    public void drawPlace(int x, int y, int rotation, boolean valid){
+        drawPlaceText(Core.bundle.formatFloat("bar.efficiency", sumAttribute(Attribute.heat, x, y) * 100, 1), x, y, valid);
     }
 
     @Override
@@ -34,10 +39,7 @@ public class ThermalGenerator extends PowerGenerator{
         super.onProximityAdded(tile);
 
         GeneratorEntity entity = tile.entity();
-        entity.productionEfficiency = 0f;
-        for(Tile other : tile.getLinkedTiles(tempTiles)){
-            entity.productionEfficiency += other.floor().heat;
-        }
+        entity.productionEfficiency = sumAttribute(Attribute.heat, tile.x, tile.y);
     }
 
     @Override
@@ -50,6 +52,6 @@ public class ThermalGenerator extends PowerGenerator{
     @Override
     public boolean canPlaceOn(Tile tile){
         //make sure there's heat at this location
-        return tile.getLinkedTilesAs(this, tempTiles).sum(other -> other.floor().heat) > 0.01f;
+        return tile.getLinkedTilesAs(this, tempTiles).sum(other -> other.floor().attributes.get(Attribute.heat)) > 0.01f;
     }
 }

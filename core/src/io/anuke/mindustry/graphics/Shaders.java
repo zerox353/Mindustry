@@ -8,28 +8,23 @@ import io.anuke.arc.scene.ui.layout.Unit;
 import io.anuke.arc.util.Time;
 
 public class Shaders{
-    public static Outline outline;
     public static Shadow shadow;
     public static BlockBuild blockbuild;
-    public static BlockPreview blockpreview;
     public static Shield shield;
     public static UnitBuild build;
-    public static MixShader mix;
-    public static Shader fullMix;
     public static FogShader fog;
     public static MenuShader menu;
+    public static SurfaceShader water, tar;
 
     public static void init(){
-        outline = new Outline();
         shadow = new Shadow();
         blockbuild = new BlockBuild();
-        blockpreview = new BlockPreview();
         shield = new Shield();
         build = new UnitBuild();
-        mix = new MixShader();
         fog = new FogShader();
-        fullMix = new LoadShader("fullmix", "default");
         menu = new MenuShader();
+        water = new SurfaceShader("water");
+        tar = new SurfaceShader("tar");
     }
 
     public static class MenuShader extends LoadShader{
@@ -57,27 +52,13 @@ public class Shaders{
         }
     }
 
-    public static class MixShader extends LoadShader{
-        public Color color = new Color(Color.WHITE);
-
-        public MixShader(){
-            super("mix", "default");
-        }
-
-        @Override
-        public void apply(){
-            super.apply();
-            setUniformf("u_color", color);
-        }
-    }
-
     public static class UnitBuild extends LoadShader{
         public float progress, time;
         public Color color = new Color();
         public TextureRegion region;
 
         public UnitBuild(){
-            super("build", "default");
+            super("unitbuild", "default");
         }
 
         @Override
@@ -87,23 +68,6 @@ public class Shaders{
             setUniformf("u_progress", progress);
             setUniformf("u_uv", region.getU(), region.getV());
             setUniformf("u_uv2", region.getU2(), region.getV2());
-            setUniformf("u_texsize", region.getTexture().getWidth(), region.getTexture().getHeight());
-        }
-    }
-
-    public static class Outline extends LoadShader{
-        public Color color = new Color();
-        public TextureRegion region = new TextureRegion();
-        public float scl;
-
-        public Outline(){
-            super("outline", "default");
-        }
-
-        @Override
-        public void apply(){
-            setUniformf("u_color", color);
-            setUniformf("u_scl", scl);
             setUniformf("u_texsize", region.getTexture().getWidth(), region.getTexture().getHeight());
         }
     }
@@ -145,23 +109,6 @@ public class Shaders{
         }
     }
 
-    public static class BlockPreview extends LoadShader{
-        public Color color = new Color();
-        public TextureRegion region = new TextureRegion();
-
-        public BlockPreview(){
-            super("blockpreview", "default");
-        }
-
-        @Override
-        public void apply(){
-            setUniformf("u_color", color);
-            setUniformf("u_uv", region.getU(), region.getV());
-            setUniformf("u_uv2", region.getU2(), region.getV2());
-            setUniformf("u_texsize", region.getTexture().getWidth(), region.getTexture().getHeight());
-        }
-    }
-
     public static class Shield extends LoadShader{
 
         public Shield(){
@@ -173,16 +120,30 @@ public class Shaders{
             setUniformf("u_dp", Unit.dp.scl(1f));
             setUniformf("u_time", Time.time() / Unit.dp.scl(1f));
             setUniformf("u_offset",
-                    Core.camera.position.x - Core.camera.width / 2 ,
-                    Core.camera.position.y - Core.camera.height / 2 );
-            setUniformf("u_texsize", Core.camera.width ,
-            Core.camera.height );
+            Core.camera.position.x - Core.camera.width / 2,
+            Core.camera.position.y - Core.camera.height / 2);
+            setUniformf("u_texsize", Core.camera.width,
+            Core.camera.height);
         }
     }
-    
+
+    public static class SurfaceShader extends LoadShader{
+
+        public SurfaceShader(String frag){
+            super(frag, "default");
+        }
+
+        @Override
+        public void apply(){
+            setUniformf("camerapos", Core.camera.position.x - Core.camera.width / 2, Core.camera.position.y - Core.camera.height / 2);
+            setUniformf("screensize", Core.camera.width, Core.camera.height);
+            setUniformf("time", Time.time());
+        }
+    }
+
     public static class LoadShader extends Shader{
         public LoadShader(String frag, String vert){
-            super(Core.files.internal("shaders/" + vert + ".vertex"), Core.files.internal("shaders/" + frag + ".fragment"));
+            super(Core.files.internal("shaders/" + vert + ".vertex.glsl"), Core.files.internal("shaders/" + frag + ".fragment.glsl"));
         }
     }
 }

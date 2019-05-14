@@ -6,7 +6,6 @@ import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Rectangle;
 import io.anuke.arc.util.Time;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.Units;
@@ -21,22 +20,21 @@ import io.anuke.mindustry.type.Weapon;
 public class Mechs implements ContentList{
     public static Mech alpha, delta, tau, omega, dart, javelin, trident, glaive;
 
-    /**These are not new mechs, just re-assignments for convenience.*/
-    public static Mech starterDesktop, starterMobile;
+    public static Mech starter;
 
     @Override
     public void load(){
 
         alpha = new Mech("alpha-mech", false){
-
             {
                 drillPower = 1;
                 mineSpeed = 1.5f;
                 mass = 1.2f;
                 speed = 0.5f;
-                boostSpeed = 0.85f;
+                boostSpeed = 0.95f;
+                buildPower = 1.2f;
                 engineColor = Color.valueOf("ffd37f");
-                health = 250f;
+                health = 300f;
 
                 weapon = new Weapon("blaster"){{
                     length = 1.5f;
@@ -45,6 +43,11 @@ public class Mechs implements ContentList{
                     ejectEffect = Fx.shellEjectSmall;
                     bullet = Bullets.standardMechSmall;
                 }};
+            }
+
+            @Override
+            public void updateAlt(Player player){
+                player.healBy(Time.delta() * 0.09f);
             }
 
             @Override
@@ -62,18 +65,20 @@ public class Mechs implements ContentList{
                 boostSpeed = 0.95f;
                 itemCapacity = 15;
                 mass = 0.9f;
-                health = 220f;
+                health = 250f;
+                buildPower = 0.9f;
                 weaponOffsetX = -1;
                 weaponOffsetY = -1;
                 engineColor = Color.valueOf("d3ddff");
 
                 weapon = new Weapon("shockgun"){{
+                    shake = 2f;
                     length = 1f;
                     reload = 40f;
+                    shotDelay = 3f;
                     roundrobin = true;
-                    shots = 1;
+                    shots = 2;
                     inaccuracy = 0f;
-                    velocityRnd = 0.2f;
                     ejectEffect = Fx.none;
                     bullet = Bullets.lightning;
                 }};
@@ -95,7 +100,6 @@ public class Mechs implements ContentList{
             float healRange = 60f;
             float healAmount = 10f;
             float healReload = 160f;
-            Rectangle rect = new Rectangle();
             boolean wasHealed;
 
             {
@@ -110,6 +114,7 @@ public class Mechs implements ContentList{
                 boostSpeed = 0.8f;
                 canHeal = true;
                 health = 200f;
+                buildPower = 1.6f;
                 engineColor = Pal.heal;
 
                 weapon = new Weapon("heal-blaster"){{
@@ -128,15 +133,12 @@ public class Mechs implements ContentList{
                 if(player.timer.get(Player.timerAbility, healReload)){
                     wasHealed = false;
 
-                    rect.setSize(healRange*2f).setCenter(player.x, player.y);
-                    Units.getNearby(player.getTeam(), rect, unit -> {
-                        if(unit.dst(player) <= healRange){
-                            if(unit.health < unit.maxHealth()){
-                                Effects.effect(Fx.heal, unit);
-                                wasHealed = true;
-                            }
-                            unit.healBy(healAmount);
+                    Units.nearby(player.getTeam(), player.x, player.y, healRange, unit -> {
+                        if(unit.health < unit.maxHealth()){
+                            Effects.effect(Fx.heal, unit);
+                            wasHealed = true;
                         }
+                        unit.healBy(healAmount);
                     });
 
                     if(wasHealed){
@@ -161,6 +163,7 @@ public class Mechs implements ContentList{
                 weaponOffsetY = 0;
                 engineColor = Color.valueOf("feb380");
                 health = 300f;
+                buildPower = 1.5f;
                 weapon = new Weapon("swarmer"){{
                     length = 1.5f;
                     recoil = 4f;
@@ -182,7 +185,7 @@ public class Mechs implements ContentList{
 
             @Override
             public float spreadX(Player player){
-                return player.shootHeat*2f;
+                return player.shootHeat * 2f;
             }
 
             @Override
@@ -193,7 +196,7 @@ public class Mechs implements ContentList{
 
             @Override
             public void updateAlt(Player player){
-                float scl = 1f - player.shootHeat/2f;
+                float scl = 1f - player.shootHeat / 2f;
                 player.velocity().scl(scl);
             }
 
@@ -206,16 +209,13 @@ public class Mechs implements ContentList{
             public void draw(Player player){
                 if(player.shootHeat <= 0.01f) return;
 
-                float alpha = Draw.getColor().a;
                 Shaders.build.progress = player.shootHeat;
                 Shaders.build.region = armorRegion;
                 Shaders.build.time = Time.time() / 10f;
                 Shaders.build.color.set(Pal.accent).a = player.shootHeat;
                 Draw.shader(Shaders.build);
-                Draw.alpha(1f);
                 Draw.rect(armorRegion, player.x, player.y, player.rotation);
-                Draw.shader(Shaders.mix);
-                Draw.color(1f, 1f, 1f, alpha);
+                Draw.shader();
             }
         };
 
@@ -223,25 +223,21 @@ public class Mechs implements ContentList{
             {
                 drillPower = 1;
                 mineSpeed = 0.9f;
-                speed = 0.4f;
-                drag = 0.1f;
-                health = 180f;
+                speed = 0.5f;
+                drag = 0.09f;
+                health = 200f;
                 weaponOffsetX = -1;
                 weaponOffsetY = -1;
                 engineColor = Pal.lightTrail;
                 cellTrnsY = 1f;
+                buildPower = 1.1f;
                 weapon = new Weapon("blaster"){{
                     length = 1.5f;
-                    reload = 20f;
+                    reload = 15f;
                     roundrobin = true;
                     ejectEffect = Fx.shellEjectSmall;
                     bullet = Bullets.standardCopper;
                 }};
-            }
-
-            @Override
-            public boolean alwaysUnlocked(){
-                return true;
             }
         };
 
@@ -249,6 +245,7 @@ public class Mechs implements ContentList{
             float minV = 3.6f;
             float maxV = 6f;
             TextureRegion shield;
+
             {
                 drillPower = -1;
                 speed = 0.11f;
@@ -284,7 +281,7 @@ public class Mechs implements ContentList{
             @Override
             public void updateAlt(Player player){
                 float scl = scld(player);
-                if(Mathf.chance(Time.delta() * (0.15*scl))){
+                if(Mathf.chance(Time.delta() * (0.15 * scl))){
                     Effects.effect(Fx.hitLancer, Pal.lancerLaser, player.x, player.y);
                     Lightning.create(player.getTeam(), Pal.lancerLaser, 10f,
                     player.x + player.velocity().x, player.y + player.velocity().y, player.rotation, 14);
@@ -295,16 +292,11 @@ public class Mechs implements ContentList{
             public void draw(Player player){
                 float scl = scld(player);
                 if(scl < 0.01f) return;
-                float alpha = Draw.getColor().a;
-                Draw.shader();
                 Draw.color(Pal.lancerLaser);
-                Draw.alpha(scl/2f);
+                Draw.alpha(scl / 2f);
                 Draw.blend(Blending.additive);
-                Draw.rect(shield, player.x + Mathf.range(scl/2f), player.y + Mathf.range(scl/2f), player.rotation - 90);
+                Draw.rect(shield, player.x + Mathf.range(scl / 2f), player.y + Mathf.range(scl / 2f), player.rotation - 90);
                 Draw.blend();
-                Draw.shader(Shaders.mix);
-                Draw.color();
-                Draw.alpha(alpha);
             }
 
             float scld(Player player){
@@ -323,6 +315,7 @@ public class Mechs implements ContentList{
                 itemCapacity = 30;
                 engineColor = Color.valueOf("84f491");
                 cellTrnsY = 1f;
+                buildPower = 2f;
                 weapon = new Weapon("bomber"){{
                     length = 0f;
                     width = 2f;
@@ -354,6 +347,7 @@ public class Mechs implements ContentList{
                 itemCapacity = 60;
                 engineColor = Color.valueOf("feb380");
                 cellTrnsY = 1f;
+                buildPower = 1.2f;
 
                 weapon = new Weapon("bomber"){{
                     length = 1.5f;
@@ -365,7 +359,6 @@ public class Mechs implements ContentList{
             }
         };
 
-        starterDesktop = alpha;
-        starterMobile = dart;
+        starter = dart;
     }
 }

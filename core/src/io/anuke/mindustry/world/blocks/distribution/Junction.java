@@ -1,13 +1,13 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
-import io.anuke.arc.util.NumberUtils;
-import io.anuke.arc.util.Pack;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.meta.BlockGroup;
+
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.content;
 
@@ -38,7 +38,7 @@ public class Junction extends Block{
             if(buffer.index > 0){
                 if(buffer.index > buffer.items.length) buffer.index = buffer.items.length;
                 long l = buffer.items[0];
-                float time = NumberUtils.intBitsToFloat(Pack.leftInt(l));
+                float time = Float.intBitsToFloat(Pack.leftInt(l));
 
                 if(Time.time() >= time + speed || Time.time() < time){
 
@@ -61,7 +61,7 @@ public class Junction extends Block{
     @Override
     public void handleItem(Item item, Tile tile, Tile source){
         JunctionEntity entity = tile.entity();
-        long value = Pack.longInt(NumberUtils.floatToIntBits(Time.time()), item.id);
+        long value = Pack.longInt(Float.floatToIntBits(Time.time()), item.id);
         int relative = source.relativeTo(tile.x, tile.y);
         entity.buffers[relative].add(value);
     }
@@ -74,7 +74,7 @@ public class Junction extends Block{
         if(entity == null || relative == -1 || entity.buffers[relative].full())
             return false;
         Tile to = tile.getNearby(relative);
-        return to != null && to.block().acceptItem(item, to, tile);
+        return to != null && to.link().entity != null;
     }
 
     @Override
@@ -84,6 +84,22 @@ public class Junction extends Block{
 
     class JunctionEntity extends TileEntity{
         Buffer[] buffers = {new Buffer(), new Buffer(), new Buffer(), new Buffer()};
+
+        @Override
+        public void write(DataOutput stream) throws IOException{
+            super.write(stream);
+            for(Buffer b : buffers){
+                b.write(stream);
+            }
+        }
+
+        @Override
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
+            for(Buffer b : buffers){
+                b.read(stream);
+            }
+        }
     }
 
     class Buffer{
@@ -97,6 +113,25 @@ public class Junction extends Block{
 
         boolean full(){
             return index >= items.length - 1;
+        }
+
+        void write(DataOutput stream) throws IOException{
+            stream.writeByte((byte)index);
+            stream.writeByte((byte)items.length);
+            for(long l : items){
+                stream.writeLong(l);
+            }
+        }
+
+        void read(DataInput stream) throws IOException{
+            index = stream.readByte();
+            byte length = stream.readByte();
+            for(int i = 0; i < length; i++){
+                long l = stream.readLong();
+                if(i < items.length){
+                    items[i] = l;
+                }
+            }
         }
     }
 }

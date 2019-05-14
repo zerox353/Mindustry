@@ -6,85 +6,105 @@ import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.Fx;
+import io.anuke.mindustry.entities.Damage;
+import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.type.TileEntity;
+import io.anuke.mindustry.graphics.Pal;
+import io.anuke.mindustry.ui.Bar;
 import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.meta.BlockStat;
+import io.anuke.mindustry.world.meta.StatUnit;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
+
+import static io.anuke.mindustry.Vars.tilesize;
 
 public class ImpactReactor extends PowerGenerator{
     protected int timerUse = timers++;
 
     protected int plasmas = 4;
     protected float warmupSpeed = 0.001f;
-    protected float useTime = 60f;
+    protected float itemDuration = 60f;
+    protected int explosionRadius = 50;
+    protected int explosionDamage = 2000;
 
     protected Color plasma1 = Color.valueOf("ffd06b"), plasma2 = Color.valueOf("ff361b");
     protected Color ind1 = Color.valueOf("858585"), ind2 = Color.valueOf("fea080");
+    protected int bottomRegion, topRegion, lightRegion;
+    protected int[] plasmaRegions;
 
     public ImpactReactor(String name){
         super(name);
         hasPower = true;
         hasLiquids = true;
-        powerProduction = 2.0f;
         liquidCapacity = 30f;
         hasItems = true;
         outputsPower = consumesPower = true;
+
+        bottomRegion = reg("-bottom");
+        topRegion = reg("-top");
+        lightRegion = reg("-light");
+        plasmaRegions = new int[plasmas];
+        for(int i = 0; i < plasmas; i++){
+            plasmaRegions[i] = reg("-plasma-" + i);
+        }
+    }
+
+    @Override
+    public void setBars(){
+        super.setBars();
+
+        bars.add("poweroutput", entity -> new Bar(() ->
+        Core.bundle.format("bar.poweroutput",
+        Strings.fixed(Math.max(entity.block.getPowerProduction(entity.tile) - consumes.getPower().usage, 0) * 60 * entity.timeScale, 1)),
+        () -> Pal.powerBar,
+        () -> ((GeneratorEntity)entity).productionEfficiency));
+    }
+
+    @Override
+    public void setStats(){
+        super.setStats();
+
+        if(hasItems){
+            stats.add(BlockStat.productionTime, itemDuration / 60f, StatUnit.seconds);
+        }
     }
 
     @Override
     public void update(Tile tile){
         FusionReactorEntity entity = tile.entity();
 
-        if(entity.cons.valid()){
+        if(entity.cons.valid() && entity.power.satisfaction >= 0.99f){
             entity.warmup = Mathf.lerpDelta(entity.warmup, 1f, warmupSpeed);
+            if(Mathf.isEqual(entity.warmup, 1f, 0.001f)){
+                entity.warmup = 1f;
+            }
 
-            if(entity.timer.get(timerUse, useTime)){
-                entity.items.remove(consumes.item(), consumes.itemAmount());
+            if(entity.timer.get(timerUse, itemDuration)){
+                entity.cons.trigger();
             }
         }else{
             entity.warmup = Mathf.lerpDelta(entity.warmup, 0f, 0.01f);
         }
 
         entity.productionEfficiency = Mathf.pow(entity.warmup, 5f);
-
-        super.update(tile);
-    }
-
-    @Override
-    public float handleDamage(Tile tile, float amount){
-        FusionReactorEntity entity = tile.entity();
-
-        if(entity.warmup < 0.4f) return amount;
-
-        float healthFract = tile.entity.health / health;
-
-        //5% chance to explode when hit at <50% HP with a normal bullet
-        if(amount > 5f && healthFract <= 0.5f && Mathf.chance(0.05)){
-            return health;
-            //10% chance to explode when hit at <25% HP with a powerful bullet
-        }else if(amount > 8f && healthFract <= 0.2f && Mathf.chance(0.1)){
-            return health;
-        }
-
-        return amount;
     }
 
     @Override
     public void draw(Tile tile){
         FusionReactorEntity entity = tile.entity();
 
-        Draw.rect(name + "-bottom", tile.drawx(), tile.drawy());
+        Draw.rect(reg(bottomRegion), tile.drawx(), tile.drawy());
 
         for(int i = 0; i < plasmas; i++){
             float r = 29f + Mathf.absin(Time.time(), 2f + i * 1f, 5f - i * 0.5f);
 
-            Draw.color(plasma1, plasma2, (float) i / plasmas);
+            Draw.color(plasma1, plasma2, (float)i / plasmas);
             Draw.alpha((0.3f + Mathf.absin(Time.time(), 2f + i * 2f, 0.3f + i * 0.05f)) * entity.warmup);
             Draw.blend(Blending.additive);
-            Draw.rect(name + "-plasma-" + i, tile.drawx(), tile.drawy(), r, r, Time.time() * (12 + i * 6f) * entity.warmup);
+            Draw.rect(reg(plasmaRegions[i]), tile.drawx(), tile.drawy(), r, r, Time.time() * (12 + i * 6f) * entity.warmup);
             Draw.blend();
         }
 
@@ -92,10 +112,10 @@ public class ImpactReactor extends PowerGenerator{
 
         Draw.rect(region, tile.drawx(), tile.drawy());
 
-        Draw.rect(name + "-top", tile.drawx(), tile.drawy());
+        Draw.rect(reg(topRegion), tile.drawx(), tile.drawy());
 
         Draw.color(ind1, ind2, entity.warmup + Mathf.absin(entity.productionEfficiency, 3f, entity.warmup * 0.5f));
-        Draw.rect(name + "-light", tile.drawx(), tile.drawy());
+        Draw.rect(reg(lightRegion), tile.drawx(), tile.drawy());
 
         Draw.color();
     }
@@ -118,7 +138,28 @@ public class ImpactReactor extends PowerGenerator{
 
         if(entity.warmup < 0.4f) return;
 
-        //TODO catastrophic failure
+        Effects.shake(6f, 16f, tile.worldx(), tile.worldy());
+        Effects.effect(Fx.impactShockwave, tile.worldx(), tile.worldy());
+        for(int i = 0; i < 6; i++){
+            Time.run(Mathf.random(80), () -> Effects.effect(Fx.impactcloud, tile.worldx(), tile.worldy()));
+        }
+
+        Damage.damage(tile.worldx(), tile.worldy(), explosionRadius * tilesize, explosionDamage * 4);
+
+
+        for(int i = 0; i < 20; i++){
+            Time.run(Mathf.random(80), () -> {
+                Tmp.v1.rnd(Mathf.random(40f));
+                Effects.effect(Fx.explosion, Tmp.v1.x + tile.worldx(), Tmp.v1.y + tile.worldy());
+            });
+        }
+
+        for(int i = 0; i < 70; i++){
+            Time.run(Mathf.random(90), () -> {
+                Tmp.v1.rnd(Mathf.random(120f));
+                Effects.effect(Fx.impactsmoke, Tmp.v1.x + tile.worldx(), Tmp.v1.y + tile.worldy());
+            });
+        }
     }
 
     public static class FusionReactorEntity extends GeneratorEntity{
@@ -131,8 +172,8 @@ public class ImpactReactor extends PowerGenerator{
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
-            super.read(stream);
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             warmup = stream.readFloat();
         }
     }

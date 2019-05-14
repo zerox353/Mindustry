@@ -16,6 +16,7 @@ public class ScorchDecal extends Decal{
 
     public static void create(float x, float y){
         if(headless) return;
+
         if(regions[0] == null){
             for(int i = 0; i < regions.length; i++){
                 regions[i] = Core.atlas.find("scorch" + (i + 1));
@@ -39,10 +40,10 @@ public class ScorchDecal extends Decal{
             float space = 1.5f + Mathf.randomSeed(id + i + 1, 0, 20) / 10f;
             Draw.rect(region,
             x + Angles.trnsx(rotation, space),
-            y + Angles.trnsy(rotation, space) + region.getHeight()/2f*Draw.scl,
+            y + Angles.trnsy(rotation, space) + region.getHeight() / 2f * Draw.scl,
             region.getWidth() * Draw.scl,
             region.getHeight() * Draw.scl,
-            region.getWidth()/2f*Draw.scl, 0, rotation - 90);
+            region.getWidth() / 2f * Draw.scl, 0, rotation - 90);
         }
     }
 }

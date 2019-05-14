@@ -4,39 +4,23 @@ import io.anuke.arc.Core;
 import io.anuke.arc.collection.IntArray;
 import io.anuke.arc.function.IntPositionConsumer;
 import io.anuke.arc.input.KeyCode;
-import io.anuke.arc.util.Pack;
-import io.anuke.arc.util.Structs;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.maps.MapTileData;
-import io.anuke.mindustry.maps.MapTileData.DataPosition;
-import io.anuke.mindustry.maps.MapTileData.TileDataMarker;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.blocks.Floor;
-
-import static io.anuke.mindustry.Vars.content;
-import static io.anuke.mindustry.Vars.ui;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.*;
 
 public enum EditorTool{
+    zoom,
     pick{
         public void touched(MapEditor editor, int x, int y){
-            if(!Structs.inBounds(x, y, editor.getMap().width(), editor.getMap().height())) return;
+            if(!Structs.inBounds(x, y, editor.width(), editor.height())) return;
 
-            byte bf = editor.getMap().read(x, y, DataPosition.floor);
-            byte bw = editor.getMap().read(x, y, DataPosition.wall);
-            byte link = editor.getMap().read(x, y, DataPosition.link);
+            Tile tile = editor.tile(x, y).link();
 
-            if(link != 0){
-                x -= (Pack.leftByte(link) - 8);
-                y -= (Pack.rightByte(link) - 8);
-                bf = editor.getMap().read(x, y, DataPosition.floor);
-                bw = editor.getMap().read(x, y, DataPosition.wall);
-            }
-
-            Block block = content.block(bw == 0 ? bf : bw);
-            editor.setDrawBlock(block);
-            ui.editor.updateSelectedBlock();
+            editor.drawBlock = tile.block() == Blocks.air ? tile.overlay() == Blocks.air ? tile.floor() : tile.overlay() : tile.block();
         }
     },
+    line,
     pencil{
         {
             edit = true;
@@ -59,78 +43,71 @@ public enum EditorTool{
             editor.draw(x, y, isPaint(), Blocks.air);
         }
     },
-    spray{
-        {
-            edit = true;
-            draggable = true;
-        }
-
-        @Override
-        public void touched(MapEditor editor, int x, int y){
-            editor.draw(x, y, isPaint(), editor.getDrawBlock(), 0.012);
-        }
-    },
-    line{
-        {
-
-        }
-    },
     fill{
         {
             edit = true;
         }
 
         IntArray stack = new IntArray();
-        int width;
-        byte be, dest;
-        boolean floor;
-        MapTileData data;
+        Block dest;
+        boolean isfloor;
+        MapEditor data;
 
         public void touched(MapEditor editor, int x, int y){
-            if(!Structs.inBounds(x, y, editor.getMap().width(), editor.getMap().height())) return;
+            if(!Structs.inBounds(x, y, editor.width(), editor.height())) return;
+            Tile tile = editor.tile(x, y);
 
-            if(editor.getDrawBlock().isMultiblock()){
+            if(editor.drawBlock.isMultiblock()){
                 //don't fill multiblocks, thanks
                 pencil.touched(editor, x, y);
                 return;
             }
 
-            data = editor.getMap();
+            data = editor;
+            isfloor = editor.drawBlock instanceof Floor;
 
-            floor = editor.getDrawBlock() instanceof Floor;
+            Block floor = tile.floor();
+            Block block = tile.block();
+            boolean synth = editor.drawBlock.synthetic();
 
-            byte bf = data.read(x, y, DataPosition.floor);
-            byte bw = data.read(x, y, DataPosition.wall);
-            boolean synth = editor.getDrawBlock().synthetic();
-            byte brt = Pack.byteByte((byte) editor.getDrawRotation(), (byte) editor.getDrawTeam().ordinal());
+            Block draw = editor.drawBlock;
+            dest = draw instanceof OverlayFloor ? tile.overlay() : isfloor ? floor : block;
 
-            dest = floor ? bf : bw;
-            byte draw = editor.getDrawBlock().id;
-
-            if(dest == draw){
+            if(dest == draw || block instanceof BlockPart || block.isMultiblock()){
                 return;
             }
 
-            width = editor.getMap().width();
-            int height = editor.getMap().height();
+            boolean alt = isAlt();
+
+            int width = editor.width();
+            int height = editor.height();
 
             IntPositionConsumer writer = (px, py) -> {
-                TileDataMarker prev = editor.getPrev(px, py, false);
+                Tile write = editor.tile(px, py);
 
-                if(floor){
-                    data.write(px, py, DataPosition.floor, draw);
+                if(isfloor){
+                    if(alt && !(draw instanceof OverlayFloor)){
+                        Block ore = write.overlay();
+                        write.setFloor((Floor)draw);
+                        write.setOverlay(ore);
+                    }else{
+                        write.setFloor((Floor)draw);
+                    }
                 }else{
-                    data.write(px, py, DataPosition.wall, draw);
+                    write.setBlock(draw);
                 }
 
                 if(synth){
-                    data.write(px, py, DataPosition.rotationTeam, brt);
+                    write.setTeam(editor.drawTeam);
                 }
 
-                editor.onWrite(px, py, prev);
+                if(draw.rotate){
+                    write.rotation((byte)editor.rotation);
+                }
             };
 
             if(isAlt()){
+                //fill all of the same type regardless of borders
                 for(int cx = 0; cx < width; cx++){
                     for(int cy = 0; cy < height; cy++){
                         if(eq(cx, cy)){
@@ -138,37 +115,47 @@ public enum EditorTool{
                         }
                     }
                 }
+            }else if(isAlt2()){
+                //fill all teams.
+                for(int cx = 0; cx < width; cx++){
+                    for(int cy = 0; cy < height; cy++){
+                        Tile write = editor.tile(cx, cy);
+                        if(write.block().synthetic()){
+                            write.setTeam(editor.drawTeam);
+                        }
+                    }
+                }
             }else{
+                //normal fill
                 int x1;
-                boolean spanAbove, spanBelow;
 
                 stack.clear();
 
-                stack.add(asi(x, y));
+                stack.add(Pos.get(x, y));
 
                 while(stack.size > 0){
                     int popped = stack.pop();
-                    x = popped % width;
-                    y = popped / width;
+                    x = Pos.x(popped);
+                    y = Pos.y(popped);
 
                     x1 = x;
                     while(x1 >= 0 && eq(x1, y)) x1--;
                     x1++;
-                    spanAbove = spanBelow = false;
+                    boolean spanAbove = false, spanBelow = false;
                     while(x1 < width && eq(x1, y)){
                         writer.accept(x1, y);
 
                         if(!spanAbove && y > 0 && eq(x1, y - 1)){
-                            stack.add(asi(x1, y - 1));
+                            stack.add(Pos.get(x1, y - 1));
                             spanAbove = true;
-                        }else if(spanAbove && y > 0 && eq(x1, y - 1)){
+                        }else if(spanAbove && !eq(x1, y - 1)){
                             spanAbove = false;
                         }
 
                         if(!spanBelow && y < height - 1 && eq(x1, y + 1)){
-                            stack.add(asi(x1, y + 1));
+                            stack.add(Pos.get(x1, y + 1));
                             spanBelow = true;
-                        }else if(spanBelow && y < height - 1 && eq(x1, y + 1)){
+                        }else if(spanBelow && y < height - 1 && !eq(x1, y + 1)){
                             spanBelow = false;
                         }
                         x1++;
@@ -178,18 +165,22 @@ public enum EditorTool{
         }
 
         boolean eq(int px, int py){
-            byte nbf = data.read(px, py, DataPosition.floor);
-            byte nbw = data.read(px, py, DataPosition.wall);
-            byte nbe = data.read(px, py, DataPosition.elevation);
+            Tile tile = data.tile(px, py);
 
-            return (floor ? nbf : nbw) == dest && nbe == be;
-        }
-
-        int asi(int x, int y){
-            return x + y * width;
+            return (data.drawBlock instanceof OverlayFloor ? tile.overlay() : isfloor ? tile.floor() : tile.block()) == dest && !(data.drawBlock instanceof OverlayFloor && tile.floor().isLiquid);
         }
     },
-    zoom;
+    spray{
+        {
+            edit = true;
+            draggable = true;
+        }
+
+        @Override
+        public void touched(MapEditor editor, int x, int y){
+            editor.draw(x, y, isPaint(), editor.drawBlock, 0.012);
+        }
+    };
 
     boolean edit, draggable;
 
@@ -199,6 +190,10 @@ public enum EditorTool{
 
     public static boolean isAlt(){
         return Core.input.keyDown(KeyCode.TAB);
+    }
+
+    public static boolean isAlt2(){
+        return Core.input.keyDown(KeyCode.GRAVE);
     }
 
     public void touched(MapEditor editor, int x, int y){

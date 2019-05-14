@@ -1,13 +1,11 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
 import io.anuke.arc.collection.Array;
+import io.anuke.arc.util.Time;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Edges;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.*;
 import io.anuke.mindustry.world.meta.BlockGroup;
-import io.anuke.arc.util.Time;
 
 public class Router extends Block{
     protected float speed = 8f;
@@ -48,7 +46,7 @@ public class Router extends Block{
     public boolean acceptItem(Item item, Tile tile, Tile source){
         SplitterEntity entity = tile.entity();
 
-        return tile.getTeamID() == source.getTeamID() && entity.lastItem == null && entity.items.total() == 0;
+        return tile.getTeam() == source.getTeam() && entity.lastItem == null && entity.items.total() == 0;
     }
 
     @Override
@@ -62,11 +60,11 @@ public class Router extends Block{
 
     Tile getTileTarget(Tile tile, Item item, Tile from, boolean set){
         Array<Tile> proximity = tile.entity.proximity();
-        int counter = tile.getDump();
+        int counter = tile.rotation();
         for(int i = 0; i < proximity.size; i++){
             Tile other = proximity.get((i + counter) % proximity.size);
             if(tile == from) continue;
-            if(set) tile.setDump((byte) ((tile.getDump() + 1) % proximity.size));
+            if(set) tile.rotation((byte)((tile.rotation() + 1) % proximity.size));
             if(other.block().acceptItem(item, other, Edges.getFacingEdge(tile, other))){
                 return other;
             }

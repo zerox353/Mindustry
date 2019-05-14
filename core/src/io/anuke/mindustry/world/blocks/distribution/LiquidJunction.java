@@ -1,12 +1,12 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
 import io.anuke.arc.Core;
+import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.mindustry.type.Liquid;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.LiquidBlock;
 import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.arc.graphics.g2d.Draw;
 
 public class LiquidJunction extends LiquidBlock{
 
@@ -19,6 +19,12 @@ public class LiquidJunction extends LiquidBlock{
     public void setStats(){
         super.setStats();
         stats.remove(BlockStat.liquidCapacity);
+    }
+
+    @Override
+    public void setBars(){
+        super.setBars();
+        bars.remove("liquid");
     }
 
     @Override
@@ -35,10 +41,10 @@ public class LiquidJunction extends LiquidBlock{
     public void handleLiquid(Tile tile, Tile source, Liquid liquid, float amount){
         int dir = source.relativeTo(tile.x, tile.y);
         dir = (dir + 4) % 4;
-        Tile to = tile.getNearby(dir).target();
+        Tile to = tile.getNearby(dir).link();
 
-        if(to.block().hasLiquids && to.block().acceptLiquid(to, tile, liquid, Math.min(to.block().liquidCapacity - to.entity.liquids.get(liquid) - 0.00001f, amount))){
-            to.block().handleLiquid(to, tile, liquid, Math.min(to.block().liquidCapacity - to.entity.liquids.get(liquid) - 0.00001f, amount));
+        if(to.block().hasLiquids && to.block().acceptLiquid(to, tile, liquid, amount)){
+            to.block().handleLiquid(to, tile, liquid, amount);
         }
     }
 
@@ -48,7 +54,7 @@ public class LiquidJunction extends LiquidBlock{
         dir = (dir + 4) % 4;
         Tile to = dest.getNearby(dir);
         if(to == null) return false;
-        to = to.target();
-        return to != null && to.entity != null && to.block().hasLiquids && to.block().acceptLiquid(to, dest, liquid, Math.min(to.block().liquidCapacity - to.entity.liquids.get(liquid) - 0.00001f, amount));
+        to = to.link();
+        return to != null && to.entity != null && to.block().hasLiquids && to.block().acceptLiquid(to, dest, liquid, amount);
     }
 }

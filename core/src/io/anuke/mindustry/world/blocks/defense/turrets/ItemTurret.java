@@ -1,6 +1,7 @@
 package io.anuke.mindustry.world.blocks.defense.turrets;
 
 import io.anuke.arc.collection.ObjectMap;
+import io.anuke.arc.collection.OrderedMap;
 import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.entities.bullet.BulletType;
@@ -10,11 +11,9 @@ import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.ui.Bar;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.values.ItemFilterValue;
+import io.anuke.mindustry.world.meta.values.AmmoListValue;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 public class ItemTurret extends CooledTurret{
     protected int maxAmmo = 30;
@@ -25,9 +24,9 @@ public class ItemTurret extends CooledTurret{
         hasItems = true;
     }
 
-    /**Initializes accepted ammo map. Format: [item1, bullet1, item2, bullet2...]*/
+    /** Initializes accepted ammo map. Format: [item1, bullet1, item2, bullet2...] */
     protected void ammo(Object... objects){
-        ammo = ObjectMap.of(objects);
+        ammo = OrderedMap.of(objects);
     }
 
     @Override
@@ -35,9 +34,18 @@ public class ItemTurret extends CooledTurret{
         super.setStats();
 
         stats.remove(BlockStat.itemCapacity);
-        stats.add(BlockStat.inputItems, new ItemFilterValue(item -> ammo.containsKey(item)));
+        stats.add(BlockStat.ammo, new AmmoListValue<>(ammo));
     }
 
+    @Override
+    public void onProximityAdded(Tile tile){
+        super.onProximityAdded(tile);
+
+        //add first ammo item to cheaty blocks so they can shoot properly
+        if(tile.isEnemyCheat() && ammo.size > 0){
+            handleItem(ammo.entries().next().key, tile, tile);
+        }
+    }
 
     @Override
     public void displayBars(Tile tile, Table bars){
@@ -70,7 +78,7 @@ public class ItemTurret extends CooledTurret{
         }
 
         //must not be found
-        entity.ammo.add(new ItemEntry(item, (int) type.ammoMultiplier));
+        entity.ammo.add(new ItemEntry(item, (int)type.ammoMultiplier));
     }
 
     @Override
@@ -88,6 +96,7 @@ public class ItemTurret extends CooledTurret{
     public class ItemTurretEntity extends TurretEntity{
         @Override
         public void write(DataOutput stream) throws IOException{
+            super.write(stream);
             stream.writeByte(ammo.size);
             for(AmmoEntry entry : ammo){
                 ItemEntry i = (ItemEntry)entry;
@@ -97,7 +106,8 @@ public class ItemTurret extends CooledTurret{
         }
 
         @Override
-        public void read(DataInput stream) throws IOException{
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
             byte amount = stream.readByte();
             for(int i = 0; i < amount; i++){
                 Item item = Vars.content.item(stream.readByte());

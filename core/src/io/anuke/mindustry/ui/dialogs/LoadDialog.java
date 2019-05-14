@@ -1,19 +1,17 @@
 package io.anuke.mindustry.ui.dialogs;
 
 import io.anuke.arc.Core;
-import io.anuke.arc.files.FileHandle;
 import io.anuke.arc.collection.Array;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.core.Platform;
-import io.anuke.mindustry.io.SaveIO;
-import io.anuke.mindustry.game.Saves.SaveSlot;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.files.FileHandle;
 import io.anuke.arc.scene.ui.ScrollPane;
 import io.anuke.arc.scene.ui.TextButton;
 import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.Strings;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.Vars;
+import io.anuke.mindustry.core.GameState.State;
+import io.anuke.mindustry.core.Platform;
+import io.anuke.mindustry.game.Saves.SaveSlot;
+import io.anuke.mindustry.io.SaveIO;
 import io.anuke.mindustry.io.SaveIO.SaveException;
 
 import java.io.IOException;
@@ -113,7 +111,7 @@ public class LoadDialog extends FloatingDialog{
 
             button.defaults().padBottom(3);
             button.row();
-            button.add(Core.bundle.format("save.map", color + (slot.getMap() == null ? Core.bundle.get("unknown") : slot.getMap().meta.name())));
+            button.add(Core.bundle.format("save.map", color + (slot.getMap() == null ? Core.bundle.get("unknown") : slot.getMap().name())));
             button.row();
             button.add(Core.bundle.format("save.wave", color + slot.getWave()));
             button.row();
@@ -187,12 +185,7 @@ public class LoadDialog extends FloatingDialog{
         button.clicked(() -> {
             if(!button.childrenPressed()){
                 int build = slot.getBuild();
-                if(SaveIO.breakingVersions.contains(build)){
-                    ui.showInfo("$save.old");
-                    slot.delete();
-                }else{
-                    runLoadSave(slot);
-                }
+                runLoadSave(slot);
             }
         });
     }

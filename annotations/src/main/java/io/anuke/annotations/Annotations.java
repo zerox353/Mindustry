@@ -1,31 +1,55 @@
 package io.anuke.annotations;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 
 public class Annotations{
 
-    /** Marks a class as serializable.*/
+    /** Indicates that a method should always call its super version. */
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CallSuper{
+
+    }
+
+    /** Annotation that allows overriding CallSuper annotation. To be used on method that overrides method with CallSuper annotation from parent class.*/
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface OverrideCallSuper {
+    }
+
+    /** Indicates that a method return or field can be null.*/
+    @Target({ElementType.METHOD, ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Nullable{
+
+    }
+
+    /** Indicates that a method return or field cannot be null.*/
+    @Target({ElementType.METHOD, ElementType.FIELD})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface NonNull{
+
+    }
+
+    /** Marks a class as serializable. */
     @Target(ElementType.TYPE)
     @Retention(RetentionPolicy.SOURCE)
     public @interface Serialize{
 
     }
 
-    /** Marks a class as a special value type struct. Class name must end in 'Struct'.*/
+    /** Marks a class as a special value type struct. Class name must end in 'Struct'. */
     @Target(ElementType.TYPE)
     @Retention(RetentionPolicy.SOURCE)
     public @interface Struct{
 
     }
 
-    /**Marks a field of a struct. Optional.*/
+    /** Marks a field of a struct. Optional. */
     @Target(ElementType.FIELD)
     @Retention(RetentionPolicy.SOURCE)
     public @interface StructField{
-        /**Size of a struct field in bits. Not valid on booleans or floating point numbers.*/
+        /** Size of a struct field in bits. Not valid on booleans or floating point numbers. */
         int value();
     }
 

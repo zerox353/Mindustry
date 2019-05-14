@@ -1,8 +1,6 @@
 package io.anuke.mindustry.core;
 
-import io.anuke.arc.ApplicationListener;
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
+import io.anuke.arc.*;
 import io.anuke.arc.Graphics.Cursor;
 import io.anuke.arc.Graphics.Cursor.SystemCursor;
 import io.anuke.arc.freetype.FreeTypeFontGenerator;
@@ -13,19 +11,13 @@ import io.anuke.arc.graphics.Colors;
 import io.anuke.arc.graphics.g2d.BitmapFont;
 import io.anuke.arc.input.KeyCode;
 import io.anuke.arc.math.Interpolation;
-import io.anuke.arc.scene.Group;
-import io.anuke.arc.scene.Scene;
-import io.anuke.arc.scene.Skin;
+import io.anuke.arc.scene.*;
 import io.anuke.arc.scene.actions.Actions;
-import io.anuke.arc.scene.ui.Dialog;
-import io.anuke.arc.scene.ui.TextField;
+import io.anuke.arc.scene.ui.*;
 import io.anuke.arc.scene.ui.TextField.TextFieldFilter;
-import io.anuke.arc.scene.ui.TooltipManager;
 import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.arc.scene.ui.layout.Unit;
-import io.anuke.arc.util.Align;
-import io.anuke.arc.util.Strings;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.editor.MapEditorDialog;
 import io.anuke.mindustry.game.EventType.ResizeEvent;
 import io.anuke.mindustry.graphics.Pal;
@@ -63,11 +55,11 @@ public class UI implements ApplicationListener{
     public AdminsDialog admins;
     public TraceDialog traces;
     public ChangelogDialog changelog;
-    public LocalPlayerDialog localplayers;
     public DatabaseDialog database;
     public ContentInfoDialog content;
     public DeployDialog deploy;
     public TechTreeDialog tech;
+    public MinimapDialog minimap;
 
     public Cursor drillCursor, unloadCursor;
 
@@ -109,27 +101,28 @@ public class UI implements ApplicationListener{
         });
 
         Colors.put("accent", Pal.accent);
+        Colors.put("stat", Pal.stat);
 
         loadCursors();
     }
 
     void loadCursors(){
-        int cursorScaling = 3;
+        int cursorScaling = 1, outlineThickness = 3;
         Color outlineColor = Color.valueOf("444444");
 
-        drillCursor = Core.graphics.newCursor("drill", cursorScaling, outlineColor);
-        unloadCursor = Core.graphics.newCursor("unload", cursorScaling, outlineColor);
-        SystemCursor.arrow.set(Core.graphics.newCursor("cursor", cursorScaling, outlineColor));
-        SystemCursor.hand.set(Core.graphics.newCursor("hand", cursorScaling, outlineColor));
-        SystemCursor.ibeam.set(Core.graphics.newCursor("ibeam", cursorScaling, outlineColor));
+        drillCursor = Core.graphics.newCursor("drill", cursorScaling, outlineColor, outlineThickness);
+        unloadCursor = Core.graphics.newCursor("unload", cursorScaling, outlineColor, outlineThickness);
+        SystemCursor.arrow.set(Core.graphics.newCursor("cursor", cursorScaling, outlineColor, outlineThickness));
+        SystemCursor.hand.set(Core.graphics.newCursor("hand", cursorScaling, outlineColor, outlineThickness));
+        SystemCursor.ibeam.set(Core.graphics.newCursor("ibeam", cursorScaling, outlineColor, outlineThickness));
 
         Core.graphics.restoreCursor();
     }
-    
+
     void generateFonts(Skin skin){
-        generator = new FreeTypeFontGenerator(Core.files.internal("fonts/pixel.ttf"));
+        generator = new FreeTypeFontGenerator(Core.files.internal("fonts/font.ttf"));
         FreeTypeFontParameter param = new FreeTypeFontParameter();
-        param.size = (int)(14*2 * Math.max(Unit.dp.scl(1f), 0.5f));
+        param.size = (int)(9 * 2 * Math.max(Unit.dp.scl(1f), 0.5f));
         param.shadowColor = Color.DARK_GRAY;
         param.shadowOffsetY = 2;
         param.incremental = true;
@@ -175,15 +168,15 @@ public class UI implements ApplicationListener{
         admins = new AdminsDialog();
         traces = new TraceDialog();
         maps = new MapsDialog();
-        localplayers = new LocalPlayerDialog();
         content = new ContentInfoDialog();
         deploy = new DeployDialog();
         tech = new TechTreeDialog();
+        minimap = new MinimapDialog();
 
         Group group = Core.scene.root;
 
         backfrag.build(group);
-        control.input(0).getFrag().build(group);
+        control.input().getFrag().build(group);
         hudfrag.build(group);
         menufrag.build(group);
         chatfrag.container().build(group);
@@ -219,7 +212,7 @@ public class UI implements ApplicationListener{
             cont.margin(30).add(text).padRight(6f);
             TextField field = cont.addField(def, t -> {
             }).size(170f, 50f).get();
-            field.setTextFieldFilter((f, c) -> field.getText().length() < 12 && filter.acceptChar(f, c));
+            field.setFilter((f, c) -> field.getText().length() < 12 && filter.acceptChar(f, c));
             Platform.instance.addDialog(field);
             buttons.defaults().size(120, 54).pad(4);
             buttons.addButton("$ok", () -> {
@@ -237,7 +230,7 @@ public class UI implements ApplicationListener{
     public void showInfoFade(String info){
         Table table = new Table();
         table.setFillParent(true);
-        table.actions(Actions.fadeOut(7f, Interpolation.fade), Actions.removeActor());
+        table.actions(Actions.fadeOut(7f, Interpolation.fade), Actions.remove());
         table.top().add(info).padTop(10);
         Core.scene.add(table);
     }
@@ -247,17 +240,6 @@ public class UI implements ApplicationListener{
             getCell(cont).growX();
             cont.margin(15).add(info).width(400f).wrap().get().setAlignment(Align.center, Align.center);
             buttons.addButton("$ok", this::hide).size(90, 50).pad(4);
-        }}.show();
-    }
-
-    public void showInfo(String info, Runnable clicked){
-        new Dialog("", "dialog"){{
-            getCell(cont).growX();
-            cont.margin(15).add(info).width(400f).wrap().get().setAlignment(Align.center, Align.center);
-            buttons.addButton("$ok", () -> {
-                clicked.run();
-                hide();
-            }).size(90, 50).pad(4);
         }}.show();
     }
 
@@ -271,6 +253,13 @@ public class UI implements ApplicationListener{
     public void showText(String titleText, String text){
         new Dialog(titleText, "dialog"){{
             cont.margin(15).add(text).width(400f).wrap().get().setAlignment(Align.center, Align.center);
+            buttons.addButton("$ok", this::hide).size(90, 50).pad(4);
+        }}.show();
+    }
+
+    public void showInfoText(String titleText, String text){
+        new Dialog(titleText, "dialog"){{
+            cont.margin(15).add(text).width(400f).wrap().left().get().setAlignment(Align.left, Align.left);
             buttons.addButton("$ok", this::hide).size(90, 50).pad(4);
         }}.show();
     }
@@ -292,11 +281,11 @@ public class UI implements ApplicationListener{
 
     public String formatAmount(int number){
         if(number >= 1000000){
-            return Strings.toFixed(number / 1000000f, 1) + "[gray]mil[]";
+            return Strings.fixed(number / 1000000f, 1) + "[gray]mil[]";
         }else if(number >= 10000){
             return number / 1000 + "[gray]k[]";
         }else if(number >= 1000){
-            return Strings.toFixed(number / 1000f, 1) + "[gray]k[]";
+            return Strings.fixed(number / 1000f, 1) + "[gray]k[]";
         }else{
             return number + "";
         }

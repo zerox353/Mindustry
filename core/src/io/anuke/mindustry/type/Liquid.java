@@ -10,30 +10,26 @@ import io.anuke.mindustry.ui.ContentDisplay;
 
 public class Liquid extends UnlockableContent{
     public final Color color;
-    public final String name;
-    public final String description;
 
-    /**0-1, 0 is completely inflammable, anything above that may catch fire when exposed to heat, 0.5+ is very flammable.*/
+    /** 0-1, 0 is completely inflammable, anything above that may catch fire when exposed to heat, 0.5+ is very flammable. */
     public float flammability;
-    /**temperature: 0.5 is 'room' temperature, 0 is very cold, 1 is molten hot*/
+    /** temperature: 0.5 is 'room' temperature, 0 is very cold, 1 is molten hot */
     public float temperature = 0.5f;
-    /**how much heat this liquid can store. 0.4=water (decent), anything lower is probably less dense and bad at cooling.*/
+    /** how much heat this liquid can store. 0.4=water (decent), anything lower is probably less dense and bad at cooling. */
     public float heatCapacity = 0.5f;
-    /**how thick this liquid is. 0.5=water (relatively viscous), 1 would be something like tar (very slow)*/
+    /** how thick this liquid is. 0.5=water (relatively viscous), 1 would be something like tar (very slow) */
     public float viscosity = 0.5f;
-    /**how prone to exploding this liquid is, when heated. 0 = nothing, 1 = nuke*/
+    /** how prone to exploding this liquid is, when heated. 0 = nothing, 1 = nuke */
     public float explosiveness;
-    /**the burning color of this liquid*/
+    /** the burning color of this liquid */
     public Color flameColor = Color.valueOf("ffb763");
-    /**The associated status effect.*/
+    /** The associated status effect. */
     public StatusEffect effect = StatusEffects.none;
-    /**Pump tier. Controls which pumps can use this liquid.*/
-    public int tier;
-    /**Displayed icon. TODO fix it by removing autogen, draw icons manually*/
+    /** Displayed icon. TODO fix it by removing autogen, draw icons manually */
     public TextureRegion iconRegion;
 
     public Liquid(String name, Color color){
-        this.name = name;
+        super(name);
         this.color = new Color(color);
         this.description = Core.bundle.getOrNull("liquid." + name + ".description");
     }
@@ -65,11 +61,6 @@ public class Liquid extends UnlockableContent{
     @Override
     public String toString(){
         return localizedName();
-    }
-
-    @Override
-    public String getContentName(){
-        return name;
     }
 
     @Override

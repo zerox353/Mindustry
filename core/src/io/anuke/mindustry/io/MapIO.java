@@ -1,200 +1,163 @@
 package io.anuke.mindustry.io;
 
-import io.anuke.arc.collection.IntIntMap;
-import io.anuke.arc.collection.ObjectMap;
-import io.anuke.arc.collection.ObjectMap.Entry;
+import io.anuke.arc.collection.StringMap;
+import io.anuke.arc.files.FileHandle;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.Pixmap;
 import io.anuke.arc.graphics.Pixmap.Format;
-import io.anuke.arc.util.Pack;
-import io.anuke.arc.util.Structs;
+import io.anuke.arc.util.io.CounterInputStream;
 import io.anuke.mindustry.content.Blocks;
 import io.anuke.mindustry.game.Team;
+import io.anuke.mindustry.game.Version;
 import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.maps.MapMeta;
-import io.anuke.mindustry.maps.MapTileData;
-import io.anuke.mindustry.maps.MapTileData.DataPosition;
-import io.anuke.mindustry.maps.MapTileData.TileDataMarker;
-import io.anuke.mindustry.type.ContentType;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.LegacyColorMapper;
-import io.anuke.mindustry.world.LegacyColorMapper.LegacyBlock;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.storage.CoreBlock;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
+import java.util.zip.InflaterInputStream;
 
-import static io.anuke.mindustry.Vars.content;
+import static io.anuke.mindustry.Vars.*;
 
-/**
- * Reads and writes map files.
- */
+/** Reads and writes map files. */
+//TODO does this class even need to exist??? move to Maps?
 public class MapIO{
-    private static final int version = 0;
-    private static IntIntMap defaultBlockMap = new IntIntMap();
+    private static final int[] pngHeader = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
 
-    private static void loadDefaultBlocks(){
-        for(Block block : content.blocks()){
-            defaultBlockMap.put(block.id, block.id);
+    public static boolean isImage(FileHandle file){
+        try(InputStream stream = file.read(32)){
+            for(int i1 : pngHeader){
+                if(stream.read() != i1){
+                    return false;
+                }
+            }
+            return true;
+        }catch(IOException e){
+            return false;
         }
     }
 
-    public static Pixmap generatePixmap(MapTileData data){
-        Pixmap pixmap = new Pixmap(data.width(), data.height(), Format.RGBA8888);
-        data.position(0, 0);
+    public static Map createMap(FileHandle file, boolean custom) throws IOException{
+        try(InputStream is = new InflaterInputStream(file.read(bufferSize)); CounterInputStream counter = new CounterInputStream(is); DataInputStream stream = new DataInputStream(counter)){
+            SaveIO.readHeader(stream);
+            int version = stream.readInt();
+            SaveVersion ver = SaveIO.getSaveWriter(version);
+            StringMap tags = new StringMap();
+            ver.region("meta", stream, counter, in -> tags.putAll(ver.readStringMap(in)));
+            return new Map(file, tags.getInt("width"), tags.getInt("height"), tags, custom, version, Version.build);
+        }
+    }
 
-        TileDataMarker marker = data.newDataMarker();
+    public static void writeMap(FileHandle file, Map map) throws IOException{
+        try{
+            SaveIO.write(file, map.tags);
+        }catch(Exception e){
+            throw new IOException(e);
+        }
+    }
 
-        for(int y = 0; y < data.height(); y++){
-            for(int x = 0; x < data.width(); x++){
-                data.read(marker);
-                Block floor = content.block(marker.floor);
-                Block wall = content.block(marker.wall);
-                int color = colorFor(floor, wall, Team.all[marker.team]);
-                pixmap.drawPixel(x, pixmap.getHeight() - 1 - y, color);
+    public static void loadMap(Map map){
+        SaveIO.load(map.file);
+    }
+
+    public static void loadMap(Map map, WorldContext cons){
+        SaveIO.load(map.file, cons);
+    }
+
+    public static Pixmap generatePreview(Map map) throws IOException{
+        //by default, it does not have an enemy core or any other cores
+        map.tags.put("enemycore", "false");
+        map.tags.put("othercore", "false");
+
+        try(InputStream is = new InflaterInputStream(map.file.read(bufferSize)); CounterInputStream counter = new CounterInputStream(is); DataInputStream stream = new DataInputStream(counter)){
+            SaveIO.readHeader(stream);
+            int version = stream.readInt();
+            SaveVersion ver = SaveIO.getSaveWriter(version);
+            ver.region("meta", stream, counter, ver::readStringMap);
+
+            Pixmap floors = new Pixmap(map.width, map.height, Format.RGBA8888);
+            Pixmap walls = new Pixmap(map.width, map.height, Format.RGBA8888);
+            int black = Color.rgba8888(Color.BLACK);
+            int shade = Color.rgba8888(0f, 0f, 0f, 0.5f);
+            CachedTile tile = new CachedTile(){
+                @Override
+                public void setBlock(Block type){
+                    super.setBlock(type);
+                    int c = colorFor(Blocks.air, block(), Blocks.air, getTeam());
+                    if(c != black){
+                        walls.drawPixel(x, floors.getHeight() - 1 - y, c);
+                        floors.drawPixel(x, floors.getHeight() - 1 - y + 1, shade);
+                    }
+                }
+
+                @Override
+                public void setTeam(Team team){
+                    super.setTeam(team);
+                    if(block instanceof CoreBlock){
+                        if(team != defaultTeam){
+                            //map must have other team's cores
+                            map.tags.put("othercore", "true");
+                        }
+
+                        if(team == waveTeam){
+                            //map must have default enemy team's core
+                            map.tags.put("enemycore", "true");
+                        }
+                    }
+                }
+            };
+
+            ver.region("content", stream, counter, ver::readContentHeader);
+            ver.region("preview_map", stream, counter, in -> ver.readMap(in, new WorldContext(){
+                @Override public void resize(int width, int height){}
+                @Override public boolean isGenerating(){return false;}
+                @Override public void begin(){}
+                @Override public void end(){}
+
+                @Override
+                public Tile tile(int x, int y){
+                    tile.x = (short)x;
+                    tile.y = (short)y;
+                    return tile;
+                }
+
+                @Override
+                public Tile create(int x, int y, int floorID, int overlayID, int wallID){
+                    if(overlayID != 0){
+                        floors.drawPixel(x, floors.getHeight() - 1 - y, colorFor(Blocks.air, Blocks.air, content.block(overlayID), Team.none));
+                    }else{
+                        floors.drawPixel(x, floors.getHeight() - 1 - y, colorFor(content.block(floorID), Blocks.air, Blocks.air, Team.none));
+                    }
+                    return tile;
+                }
+            }));
+
+            floors.drawPixmap(walls, 0, 0);
+            walls.dispose();
+            return floors;
+        }finally{
+            content.setTemporaryMapper(null);
+        }
+    }
+
+    public static Pixmap generatePreview(Tile[][] tiles){
+        Pixmap pixmap = new Pixmap(tiles.length, tiles[0].length, Format.RGBA8888);
+        for(int x = 0; x < pixmap.getWidth(); x++){
+            for(int y = 0; y < pixmap.getHeight(); y++){
+                Tile tile = tiles[x][y];
+                pixmap.drawPixel(x, pixmap.getHeight() - 1 - y, colorFor(tile.floor(), tile.block(), tile.overlay(), tile.getTeam()));
             }
         }
-
-        data.position(0, 0);
-
         return pixmap;
     }
 
-    /**Reads a pixmap in the old (3.5) map format.*/
-    public static MapTileData readLegacyPixmap(Pixmap pixmap){
-        MapTileData data = new MapTileData(pixmap.getWidth(), pixmap.getHeight());
-
-        for(int x = 0; x < data.width(); x++){
-            for(int y = 0; y < data.height(); y++){
-                int color = pixmap.getPixel(x, pixmap.getHeight() - 1 - y);
-                LegacyBlock block = LegacyColorMapper.get(color);
-
-                data.write(x, y, DataPosition.floor, block.floor.id);
-                data.write(x, y, DataPosition.wall, block.wall.id);
-
-                //place core
-                if(color == Color.rgba8888(Color.GREEN)){
-                    for(int dx = 0; dx < 3; dx++){
-                        for(int dy = 0; dy < 3; dy++){
-                            int worldx = dx - 1 + x;
-                            int worldy = dy - 1 + y;
-
-                            if(Structs.inBounds(worldx, worldy, pixmap.getWidth(), pixmap.getHeight())){
-                                data.write(worldx, worldy, DataPosition.wall, Blocks.part.id);
-                                data.write(worldx, worldy, DataPosition.rotationTeam, Pack.byteByte((byte)0, (byte)Team.blue.ordinal()));
-                                data.write(worldx, worldy, DataPosition.link, Pack.byteByte((byte) (dx - 1 + 8), (byte) (dy - 1 + 8)));
-                            }
-                        }
-                    }
-
-                    data.write(x, y, DataPosition.wall, Blocks.coreShard.id);
-                    data.write(x, y, DataPosition.rotationTeam, Pack.byteByte((byte)0, (byte)Team.blue.ordinal()));
-                }
-            }
-        }
-
-        return data;
-    }
-
-    public static void writeMap(OutputStream stream, ObjectMap<String, String> tags, MapTileData data) throws IOException{
-        if(defaultBlockMap == null){
-            loadDefaultBlocks();
-        }
-
-        MapMeta meta = new MapMeta(version, tags, data.width(), data.height(), defaultBlockMap);
-
-        DataOutputStream ds = new DataOutputStream(stream);
-
-        writeMapMeta(ds, meta);
-        ds.write(data.toArray());
-
-        ds.close();
-    }
-
-    /**
-     * Reads tile data, skipping meta.
-     */
-    public static MapTileData readTileData(DataInputStream stream, boolean readOnly) throws IOException{
-        MapMeta meta = readMapMeta(stream);
-        return readTileData(stream, meta, readOnly);
-    }
-
-
-    /**
-     * Does not skip meta. Call after reading meta.
-     */
-    public static MapTileData readTileData(DataInputStream stream, MapMeta meta, boolean readOnly) throws IOException{
-        byte[] bytes = new byte[stream.available()];
-        stream.readFully(bytes);
-        return new MapTileData(bytes, meta.width, meta.height, meta.blockMap, readOnly);
-    }
-
-    /**
-     * Reads tile data, skipping meta tags.
-     */
-    public static MapTileData readTileData(Map map, boolean readOnly){
-        try(DataInputStream ds = new DataInputStream(map.stream.get())){
-            return MapIO.readTileData(ds, readOnly);
-        }catch(IOException e){
-            throw new RuntimeException(e);
-        }
-    }
-
-    public static MapMeta readMapMeta(DataInputStream stream) throws IOException{
-        ObjectMap<String, String> tags = new ObjectMap<>();
-        IntIntMap map = new IntIntMap();
-
-        int version = stream.readInt();
-
-        byte tagAmount = stream.readByte();
-
-        for(int i = 0; i < tagAmount; i++){
-            String name = stream.readUTF();
-            String value = stream.readUTF();
-            tags.put(name, value);
-        }
-
-        short blocks = stream.readShort();
-        for(int i = 0; i < blocks; i++){
-            short id = stream.readShort();
-            String name = stream.readUTF();
-            Block block = content.getByName(ContentType.block, name);
-            if(block == null){
-                block = Blocks.air;
-            }
-            map.put(id, block.id);
-        }
-
-        int width = stream.readShort();
-        int height = stream.readShort();
-
-        return new MapMeta(version, tags, width, height, map);
-    }
-
-    public static void writeMapMeta(DataOutputStream stream, MapMeta meta) throws IOException{
-        stream.writeInt(meta.version);
-        stream.writeByte((byte) meta.tags.size);
-
-        for(Entry<String, String> entry : meta.tags.entries()){
-            stream.writeUTF(entry.key);
-            stream.writeUTF(entry.value);
-        }
-
-        stream.writeShort(content.blocks().size);
-        for(Block block : content.blocks()){
-            stream.writeShort(block.id);
-            stream.writeUTF(block.name);
-        }
-
-        stream.writeShort(meta.width);
-        stream.writeShort(meta.height);
-    }
-
-    public static int colorFor(Block floor, Block wall, Team team){
+    public static int colorFor(Block floor, Block wall, Block ore, Team team){
         if(wall.synthetic()){
             return team.intColor;
         }
-        return Color.rgba8888(wall.solid ? wall.color : floor.color);
+        return Color.rgba8888(wall.solid ? wall.color : ore == Blocks.air ? floor.color : ore.color);
+    }
+
+    interface TileProvider{
+        Tile get(int x, int y);
     }
 }

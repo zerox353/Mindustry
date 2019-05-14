@@ -1,27 +1,18 @@
 package io.anuke.mindustry.core;
 
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.ObjectMap;
-import io.anuke.arc.collection.ObjectSet;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.function.Consumer;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.Pixmap;
 import io.anuke.arc.util.Log;
 import io.anuke.mindustry.content.*;
-import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.entities.bullet.Bullet;
 import io.anuke.mindustry.entities.bullet.BulletType;
-import io.anuke.mindustry.entities.effect.Fire;
-import io.anuke.mindustry.entities.effect.Lightning;
-import io.anuke.mindustry.entities.effect.Puddle;
+import io.anuke.mindustry.entities.effect.*;
 import io.anuke.mindustry.entities.traits.TypeTrait;
-import io.anuke.mindustry.game.Content;
-import io.anuke.mindustry.game.ContentList;
-import io.anuke.mindustry.game.MappableContent;
-import io.anuke.mindustry.type.ContentType;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.type.Liquid;
-import io.anuke.mindustry.type.Zone;
+import io.anuke.mindustry.entities.type.Player;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.LegacyColorMapper;
 
@@ -34,7 +25,7 @@ import static io.anuke.arc.Core.files;
 @SuppressWarnings("unchecked")
 public class ContentLoader{
     private boolean loaded = false;
-    private boolean verbose = true;
+    private boolean verbose = false;
 
     private ObjectMap<String, MappableContent>[] contentNameMap = new ObjectMap[ContentType.values().length];
     private Array<Content>[] contentMap = new Array[ContentType.values().length];
@@ -49,6 +40,7 @@ public class ContentLoader{
         new Mechs(),
         new UnitTypes(),
         new Blocks(),
+        new Loadouts(),
         new TechTree(),
         new Zones(),
 
@@ -56,7 +48,11 @@ public class ContentLoader{
         new LegacyColorMapper(),
     };
 
-    /**Creates all content types.*/
+    public void setVerbose(){
+        verbose = true;
+    }
+
+    /** Creates all content types. */
     public void load(){
         if(loaded){
             Log.info("Content already loaded, skipping.");
@@ -67,7 +63,7 @@ public class ContentLoader{
 
         for(ContentType type : ContentType.values()){
             contentMap[type.ordinal()] = new Array<>();
-            contentNameMap[type.ordinal()] =  new ObjectMap<>();
+            contentNameMap[type.ordinal()] = new ObjectMap<>();
         }
 
         for(ContentList list : content){
@@ -80,13 +76,13 @@ public class ContentLoader{
 
             for(Content c : contentMap[type.ordinal()]){
                 if(c instanceof MappableContent){
-                    String name = ((MappableContent) c).getContentName();
+                    String name = ((MappableContent)c).name;
                     if(contentNameMap[type.ordinal()].containsKey(name)){
                         throw new IllegalArgumentException("Two content objects cannot have the same name! (issue: '" + name + "')");
                     }
-                    contentNameMap[type.ordinal()].put(name, (MappableContent) c);
+                    contentNameMap[type.ordinal()].put(name, (MappableContent)c);
                 }
-                total ++;
+                total++;
             }
         }
 
@@ -94,15 +90,10 @@ public class ContentLoader{
         for(Array<Content> arr : contentMap){
             for(int i = 0; i < arr.size; i++){
                 int id = arr.get(i).id;
-                if(id < 0) id += 256;
                 if(id != i){
                     throw new IllegalArgumentException("Out-of-order IDs for content '" + arr.get(i) + "' (expected " + i + " but got " + id + ")");
                 }
             }
-        }
-
-        if(blocks().size >= 256){
-            throw new ImpendingDoomException("THE TIME HAS COME. More than 256 blocks have been created.");
         }
 
         if(verbose){
@@ -117,7 +108,7 @@ public class ContentLoader{
         loaded = true;
     }
 
-    /**Initializes all content with the specified function.*/
+    /** Initializes all content with the specified function. */
     public void initialize(Consumer<Content> callable){
         if(initialization.contains(callable)) return;
 
@@ -130,10 +121,10 @@ public class ContentLoader{
         initialization.add(callable);
     }
 
-    /**Loads block colors.*/
+    /** Loads block colors. */
     public void loadColors(){
         Pixmap pixmap = new Pixmap(files.internal("sprites/block_colors.png"));
-        for(int i = 0; i < 256; i++){
+        for(int i = 0; i < pixmap.getWidth(); i++){
             if(blocks().size > i){
                 int color = pixmap.getPixel(i, 0);
 
@@ -174,8 +165,6 @@ public class ContentLoader{
     }
 
     public <T extends Content> T getByID(ContentType type, int id){
-        //offset negative values by 256, as they are probably a product of byte overflow
-        if(id < 0) id += 256;
 
         if(temporaryMapper != null && temporaryMapper[type.ordinal()] != null && temporaryMapper[type.ordinal()].length != 0){
             if(temporaryMapper[type.ordinal()].length <= id || temporaryMapper[type.ordinal()][id] == null){
@@ -191,7 +180,7 @@ public class ContentLoader{
     }
 
     public <T extends Content> Array<T> getBy(ContentType type){
-        return (Array<T>) contentMap[type.ordinal()];
+        return (Array<T>)contentMap[type.ordinal()];
     }
 
     //utility methods, just makes things a bit shorter
@@ -201,7 +190,7 @@ public class ContentLoader{
     }
 
     public Block block(int id){
-        return (Block) getByID(ContentType.block, id);
+        return (Block)getByID(ContentType.block, id);
     }
 
     public Array<Item> items(){
@@ -209,7 +198,7 @@ public class ContentLoader{
     }
 
     public Item item(int id){
-        return (Item) getByID(ContentType.item, id);
+        return (Item)getByID(ContentType.item, id);
     }
 
     public Array<Liquid> liquids(){
@@ -217,7 +206,7 @@ public class ContentLoader{
     }
 
     public Liquid liquid(int id){
-        return (Liquid) getByID(ContentType.liquid, id);
+        return (Liquid)getByID(ContentType.liquid, id);
     }
 
     public Array<BulletType> bullets(){
@@ -225,11 +214,15 @@ public class ContentLoader{
     }
 
     public BulletType bullet(int id){
-        return (BulletType) getByID(ContentType.bullet, id);
+        return (BulletType)getByID(ContentType.bullet, id);
     }
 
     public Array<Zone> zones(){
         return getBy(ContentType.zone);
+    }
+
+    public Array<UnitType> units(){
+        return getBy(ContentType.unit);
     }
 
     /**
@@ -243,6 +236,4 @@ public class ContentLoader{
         TypeTrait.registerType(Bullet.class, Bullet::new);
         TypeTrait.registerType(Lightning.class, Lightning::new);
     }
-
-    private class ImpendingDoomException extends RuntimeException{ ImpendingDoomException(String s){ super(s); }}
 }

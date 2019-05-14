@@ -1,6 +1,8 @@
 package io.anuke.mindustry.world.meta;
 
-/**A specific category for a stat.*/
+import io.anuke.arc.Core;
+
+/** A specific category for a stat. */
 public enum StatCategory{
     general,
     power,
@@ -8,5 +10,9 @@ public enum StatCategory{
     items,
     crafting,
     shooting,
-    optional,
+    optional;
+
+    public String localized(){
+        return Core.bundle.get("category." + name());
+    }
 }

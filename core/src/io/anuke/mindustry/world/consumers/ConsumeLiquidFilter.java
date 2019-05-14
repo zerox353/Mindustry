@@ -1,48 +1,39 @@
 package io.anuke.mindustry.world.consumers;
 
 import io.anuke.arc.collection.Array;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.type.Liquid;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.BlockStats;
-import io.anuke.mindustry.world.meta.StatUnit;
-import io.anuke.mindustry.world.meta.values.LiquidFilterValue;
 import io.anuke.arc.function.Predicate;
 import io.anuke.arc.scene.ui.layout.Table;
+import io.anuke.mindustry.entities.type.TileEntity;
+import io.anuke.mindustry.type.Liquid;
+import io.anuke.mindustry.ui.MultiReqImage;
+import io.anuke.mindustry.ui.ReqImage;
+import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.world.meta.BlockStat;
+import io.anuke.mindustry.world.meta.BlockStats;
+import io.anuke.mindustry.world.meta.values.LiquidFilterValue;
 
 import static io.anuke.mindustry.Vars.content;
 
-public class ConsumeLiquidFilter extends Consume{
-    private final Predicate<Liquid> filter;
-    private final float use;
-    private final boolean isFuel;
-
-    public ConsumeLiquidFilter(Predicate<Liquid> liquid, float amount, boolean isFuel){
-        this.filter = liquid;
-        this.use = amount;
-        this.isFuel = isFuel;
-    }
+public class ConsumeLiquidFilter extends ConsumeLiquidBase{
+    public final Predicate<Liquid> filter;
 
     public ConsumeLiquidFilter(Predicate<Liquid> liquid, float amount){
-        this(liquid, amount, false);
+        super(amount);
+        this.filter = liquid;
     }
 
     @Override
-    public void buildTooltip(Table table){
-        Array<Liquid> list = new Array<>();
+    public void applyLiquidFilter(boolean[] arr){
+        content.liquids().each(filter, item -> arr[item.id] = true);
+    }
 
-        for(Liquid item : content.liquids()){
-            if(!item.isHidden() && filter.test(item)) list.add(item);
-        }
+    @Override
+    public void build(Tile tile, Table table){
+        Array<Liquid> list = content.liquids().select(l -> !l.isHidden() && filter.test(l));
+        MultiReqImage image = new MultiReqImage();
+        list.each(liquid -> image.add(new ReqImage(liquid.getContentIcon(), () -> tile.entity != null && tile.entity.liquids != null && tile.entity.liquids.get(liquid) >= use(tile.entity))));
 
-        for(int i = 0; i < list.size; i++){
-            Liquid item = list.get(i);
-            table.addImage(item.getContentIcon()).size(8 * 3).padRight(2).padLeft(2).padTop(2).padBottom(2);
-            if(i != list.size - 1){
-                table.add("/");
-            }
-        }
+        table.add(image).size(8 * 4);
     }
 
     @Override
@@ -51,29 +42,17 @@ public class ConsumeLiquidFilter extends Consume{
     }
 
     @Override
-    public void update(Block block, TileEntity entity){
-        entity.liquids.remove(entity.liquids.current(), use(block, entity));
+    public void update(TileEntity entity){
+        entity.liquids.remove(entity.liquids.current(), use(entity));
     }
 
     @Override
-    public boolean valid(Block block, TileEntity entity){
-        return entity.liquids != null && filter.test(entity.liquids.current()) && entity.liquids.currentAmount() >= use(block, entity);
+    public boolean valid(TileEntity entity){
+        return entity != null && entity.liquids != null && filter.test(entity.liquids.current()) && entity.liquids.currentAmount() >= use(entity);
     }
 
     @Override
     public void display(BlockStats stats){
-        if(boost){
-            stats.add(BlockStat.boostLiquid, new LiquidFilterValue(filter));
-        }else if(isFuel){
-            stats.add(BlockStat.inputLiquidFuel, new LiquidFilterValue(filter));
-            stats.add(BlockStat.liquidFuelUse, 60f * use, StatUnit.liquidSecond);
-        }else {
-            stats.add(BlockStat.inputLiquid, new LiquidFilterValue(filter));
-            stats.add(BlockStat.liquidUse, 60f * use, StatUnit.liquidSecond);
-        }
-    }
-
-    float use(Block block, TileEntity entity){
-        return Math.min(use * entity.delta(), block.liquidCapacity);
+        stats.add(booster ? BlockStat.booster : BlockStat.input, new LiquidFilterValue(filter, amount * timePeriod, timePeriod == 60f));
     }
 }

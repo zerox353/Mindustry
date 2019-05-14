@@ -1,10 +1,10 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
+import io.anuke.arc.math.Mathf;
+import io.anuke.arc.util.Time;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.world.Edges;
 import io.anuke.mindustry.world.Tile;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.math.Mathf;
 
 public class OverflowGate extends Router{
 
@@ -23,7 +23,7 @@ public class OverflowGate extends Router{
         }
 
         if(entity.lastItem != null){
-            entity.time += 1f/speed * Time.delta();
+            entity.time += 1f / speed * Time.delta();
             Tile target = getTileTarget(tile, entity.lastItem, entity.lastInput, false);
 
             if(target != null && (entity.time >= 1f)){
@@ -58,12 +58,12 @@ public class OverflowGate extends Router{
             }else if(bc && !ac){
                 to = b;
             }else{
-                if(tile.getDump() == 0){
+                if(tile.rotation() == 0){
                     to = a;
-                    if(flip) tile.setDump((byte) 1);
+                    if(flip) tile.rotation((byte)1);
                 }else{
                     to = b;
-                    if(flip) tile.setDump((byte) 0);
+                    if(flip) tile.rotation((byte)0);
                 }
             }
         }

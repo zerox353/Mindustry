@@ -1,40 +1,34 @@
 package io.anuke.mindustry.core;
 
-import io.anuke.annotations.Annotations.Loc;
-import io.anuke.annotations.Annotations.PacketPriority;
-import io.anuke.annotations.Annotations.Remote;
-import io.anuke.annotations.Annotations.Variant;
+import io.anuke.annotations.Annotations.*;
 import io.anuke.arc.ApplicationListener;
 import io.anuke.arc.Core;
 import io.anuke.arc.collection.IntSet;
-import io.anuke.mindustry.entities.Entities;
-import io.anuke.mindustry.entities.EntityGroup;
 import io.anuke.arc.graphics.Color;
-import io.anuke.arc.util.Interval;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.io.ReusableByteArrayInputStream;
+import io.anuke.arc.math.RandomXS128;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.io.ReusableByteInStream;
 import io.anuke.arc.util.serialization.Base64Coder;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.entities.type.Player;
+import io.anuke.mindustry.entities.Entities;
+import io.anuke.mindustry.entities.EntityGroup;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
 import io.anuke.mindustry.entities.traits.SyncTrait;
 import io.anuke.mindustry.entities.traits.TypeTrait;
+import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.game.Version;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.gen.RemoteReadClient;
-import io.anuke.mindustry.net.Net;
+import io.anuke.mindustry.net.Administration.TraceInfo;
+import io.anuke.mindustry.net.*;
 import io.anuke.mindustry.net.Net.SendMode;
-import io.anuke.mindustry.net.NetworkIO;
 import io.anuke.mindustry.net.Packets.*;
-import io.anuke.mindustry.net.ValidateException;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.modules.ItemModule;
 
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.util.Random;
 import java.util.zip.InflaterInputStream;
 
 import static io.anuke.mindustry.Vars.*;
@@ -45,25 +39,25 @@ public class NetClient implements ApplicationListener{
     public final static float viewScale = 2f;
 
     private Interval timer = new Interval(5);
-    /**Whether the client is currently connecting.*/
+    /** Whether the client is currently connecting. */
     private boolean connecting = false;
-    /**If true, no message will be shown on disconnect.*/
+    /** If true, no message will be shown on disconnect. */
     private boolean quiet = false;
-    /**Counter for data timeout.*/
+    /** Counter for data timeout. */
     private float timeoutTime = 0f;
-    /**Last sent client snapshot ID.*/
+    /** Last sent client snapshot ID. */
     private int lastSent;
 
-    /**List of entities that were removed, and need not be added while syncing.*/
+    /** List of entities that were removed, and need not be added while syncing. */
     private IntSet removed = new IntSet();
-    /**Byte stream for reading in snapshots.*/
-    private ReusableByteArrayInputStream byteStream = new ReusableByteArrayInputStream();
+    /** Byte stream for reading in snapshots. */
+    private ReusableByteInStream byteStream = new ReusableByteInStream();
     private DataInputStream dataStream = new DataInputStream(byteStream);
 
     public NetClient(){
 
         Net.handleClient(Connect.class, packet -> {
-            Player player = players[0];
+            Log.info("Connecting to server: {0}", packet.addressTCP);
 
             player.isAdmin = false;
 
@@ -98,16 +92,16 @@ public class NetClient implements ApplicationListener{
         });
 
         Net.handleClient(Disconnect.class, packet -> {
+            state.set(State.menu);
+            connecting = false;
+            logic.reset();
+            Platform.instance.updateRPC();
+
             if(quiet) return;
 
             Time.runTask(3f, ui.loadfrag::hide);
 
-            state.set(State.menu);
-
             ui.showError("$disconnect");
-            connecting = false;
-
-            Platform.instance.updateRPC();
         });
 
         Net.handleClient(WorldStream.class, data -> {
@@ -123,30 +117,53 @@ public class NetClient implements ApplicationListener{
         });
     }
 
-    @Remote(called = Loc.server, targets = Loc.both, forward = true)
-    public static void sendMessage(Player player, String message){
-        if(message.length() > maxTextLength){
-            throw new ValidateException(player, "Player has sent a message above the text limit.");
+    //called on all clients
+    @Remote(called = Loc.server, targets = Loc.server, variants = Variant.both)
+    public static void sendMessage(String message, String sender, Player playersender){
+        if(Vars.ui != null){
+            Vars.ui.chatfrag.addMessage(message, sender);
         }
 
-        Log.info("&y{0}: &lb{1}", (player == null || player.name == null ? "" : player.name), message);
-
-        if(Vars.ui != null){
-            Vars.ui.chatfrag.addMessage(message, player == null ? null : colorizeName(player.id, player.name));
+        if(playersender != null){
+            playersender.lastText = message;
+            playersender.textFadeTime = 1f;
         }
     }
 
-    @Remote(called = Loc.server, variants = Variant.both, forward = true)
+    //equivalent to above method but there's no sender and no console log
+    @Remote(called = Loc.server, targets = Loc.server)
     public static void sendMessage(String message){
         if(Vars.ui != null){
             Vars.ui.chatfrag.addMessage(message, null);
         }
     }
 
+    //called when a server recieves a chat message from a player
+    @Remote(called = Loc.server, targets = Loc.client)
+    public static void sendChatMessage(Player player, String message){
+        if(message.length() > maxTextLength){
+            throw new ValidateException(player, "Player has sent a message above the text limit.");
+        }
+
+        //server console logging
+        Log.info("&y{0}: &lb{1}", player.name, message);
+
+        //invoke event for all clients but also locally
+        //this is required so other clients get the correct name even if they don't know who's sending it yet
+        Call.sendMessage(message, colorizeName(player.id, player.name), player);
+    }
+
     private static String colorizeName(int id, String name){
         Player player = playerGroup.getByID(id);
         if(name == null || player == null) return null;
         return "[#" + player.color.toString().toUpperCase() + "]" + name;
+    }
+
+    @Remote(variants = Variant.one)
+    public static void onTraceInfo(Player player, TraceInfo info){
+        if(player != null){
+            ui.traces.show(player, info);
+        }
     }
 
     @Remote(variants = Variant.one, priority = PacketPriority.high)
@@ -189,8 +206,8 @@ public class NetClient implements ApplicationListener{
 
     @Remote(variants = Variant.one)
     public static void onPositionSet(float x, float y){
-        players[0].x = x;
-        players[0].y = y;
+        player.x = x;
+        player.y = y;
     }
 
     @Remote
@@ -211,12 +228,17 @@ public class NetClient implements ApplicationListener{
                 int id = input.readInt();
                 byte typeID = input.readByte();
 
-                SyncTrait entity = (SyncTrait) group.getByID(id);
+                SyncTrait entity = (SyncTrait)group.getByID(id);
                 boolean add = false;
+
+                if(entity == null && id == player.id){
+                    entity = player;
+                    add = true;
+                }
 
                 //entity must not be added yet, so create it
                 if(entity == null){
-                    entity = (SyncTrait) TypeTrait.getTypeByID(typeID).get(); //create entity from supplier
+                    entity = (SyncTrait)TypeTrait.getTypeByID(typeID).get(); //create entity from supplier
                     entity.resetID(id);
                     if(!netClient.isEntityUsed(entity.getID())){
                         add = true;
@@ -250,6 +272,7 @@ public class NetClient implements ApplicationListener{
             for(int i = 0; i < cores; i++){
                 int pos = input.readInt();
                 Tile tile = world.tile(pos);
+
                 if(tile != null && tile.entity != null){
                     tile.entity.items.read(input);
                 }else{
@@ -318,7 +341,7 @@ public class NetClient implements ApplicationListener{
         Net.disconnect();
     }
 
-    /**When set, any disconnects will be ignored and no dialogs will be shown.*/
+    /** When set, any disconnects will be ignored and no dialogs will be shown. */
     public void setQuiet(){
         quiet = true;
     }
@@ -334,8 +357,6 @@ public class NetClient implements ApplicationListener{
     void sync(){
 
         if(timer.get(0, playerSyncTime)){
-            Player player = players[0];
-
             BuildRequest[] requests;
             //limit to 10 to prevent buffer overflows
             int usedRequests = Math.min(player.getPlaceQueue().size, 10);
@@ -346,12 +367,13 @@ public class NetClient implements ApplicationListener{
             }
 
             Call.onClientShapshot(lastSent++, player.x, player.y,
-                player.pointerX, player.pointerY, player.rotation, player.baseRotation,
-                player.velocity().x, player.velocity().y,
-                player.getMineTile(),
-                player.isBoosting, player.isShooting, requests,
-                Core.camera.position.x, Core.camera.position.y,
-                Core.camera.width * viewScale, Core.camera.height * viewScale);
+            player.pointerX, player.pointerY, player.rotation, player.baseRotation,
+            player.velocity().x, player.velocity().y,
+            player.getMineTile(),
+            player.isBoosting, player.isShooting, ui.chatfrag.chatOpen(),
+            requests,
+            Core.camera.position.x, Core.camera.position.y,
+            Core.camera.width * viewScale, Core.camera.height * viewScale);
         }
 
         if(timer.get(1, 60)){
@@ -364,7 +386,7 @@ public class NetClient implements ApplicationListener{
             return Core.settings.getString("usid-" + ip, null);
         }else{
             byte[] bytes = new byte[8];
-            new Random().nextBytes(bytes);
+            new RandomXS128().nextBytes(bytes);
             String result = new String(Base64Coder.encode(bytes));
             Core.settings.put("usid-" + ip, result);
             Core.settings.save();

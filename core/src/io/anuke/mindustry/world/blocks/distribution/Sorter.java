@@ -3,25 +3,23 @@ package io.anuke.mindustry.world.blocks.distribution;
 import io.anuke.annotations.Annotations.Loc;
 import io.anuke.annotations.Annotations.Remote;
 import io.anuke.arc.Core;
+import io.anuke.arc.graphics.g2d.Draw;
+import io.anuke.arc.math.Mathf;
+import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.mindustry.entities.type.Player;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.blocks.SelectionTrait;
+import io.anuke.mindustry.world.blocks.ItemSelection;
 import io.anuke.mindustry.world.meta.BlockGroup;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.math.Mathf;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.content;
 
-public class Sorter extends Block implements SelectionTrait{
+public class Sorter extends Block{
     private static Item lastItem;
 
     public Sorter(String name){
@@ -90,9 +88,9 @@ public class Sorter extends Block implements SelectionTrait{
             Tile a = dest.getNearby(Mathf.mod(dir - 1, 4));
             Tile b = dest.getNearby(Mathf.mod(dir + 1, 4));
             boolean ac = a != null && !(a.block().instantTransfer && source.block().instantTransfer) &&
-                    a.block().acceptItem(item, a, dest);
+            a.block().acceptItem(item, a, dest);
             boolean bc = b != null && !(b.block().instantTransfer && source.block().instantTransfer) &&
-                    b.block().acceptItem(item, b, dest);
+            b.block().acceptItem(item, b, dest);
 
             if(ac && !bc){
                 to = a;
@@ -101,14 +99,14 @@ public class Sorter extends Block implements SelectionTrait{
             }else if(!bc){
                 return null;
             }else{
-                if(dest.getDump() == 0){
+                if(dest.rotation() == 0){
                     to = a;
                     if(flip)
-                        dest.setDump((byte) 1);
+                        dest.rotation((byte)1);
                 }else{
                     to = b;
                     if(flip)
-                        dest.setDump((byte) 0);
+                        dest.rotation((byte)0);
                 }
             }
         }
@@ -119,7 +117,7 @@ public class Sorter extends Block implements SelectionTrait{
     @Override
     public void buildTable(Tile tile, Table table){
         SorterEntity entity = tile.entity();
-        buildItemTable(table, () -> entity.sortItem, item -> {
+        ItemSelection.buildItemTable(table, () -> entity.sortItem, item -> {
             lastItem = item;
             Call.setSorterItem(null, tile, item);
         });
@@ -134,14 +132,15 @@ public class Sorter extends Block implements SelectionTrait{
         public Item sortItem;
 
         @Override
-        public void writeConfig(DataOutput stream) throws IOException{
-            stream.writeByte(sortItem == null ? -1 : sortItem.id);
+        public void write(DataOutput stream) throws IOException{
+            super.write(stream);
+            stream.writeShort(sortItem == null ? -1 : sortItem.id);
         }
 
         @Override
-        public void readConfig(DataInput stream) throws IOException{
-            byte b = stream.readByte();
-            sortItem = b == -1 ? null : content.items().get(b);
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
+            sortItem = content.item(stream.readShort());
         }
     }
 }

@@ -5,8 +5,6 @@ import io.anuke.arc.collection.ObjectSet;
 import io.anuke.arc.function.Supplier;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.Strings;
 import io.anuke.mindustry.content.Items;
 import io.anuke.mindustry.entities.traits.TypeTrait;
 import io.anuke.mindustry.entities.type.BaseUnit;
@@ -16,9 +14,6 @@ import io.anuke.mindustry.ui.ContentDisplay;
 
 public class UnitType extends UnlockableContent{
     protected final Supplier<? extends BaseUnit> constructor;
-
-    public final String name;
-    public final String description;
     public float health = 60;
     public float hitsize = 7f;
     public float hitsizeTile = 4f;
@@ -44,16 +39,11 @@ public class UnitType extends UnlockableContent{
     public TextureRegion iconRegion, legRegion, baseRegion, region;
 
     public <T extends BaseUnit> UnitType(String name, Class<T> type, Supplier<T> mainConstructor){
-        this.name = name;
+        super(name);
         this.constructor = mainConstructor;
         this.description = Core.bundle.getOrNull("unit." + name + ".description");
 
         TypeTrait.registerType(type, mainConstructor);
-
-        if(!Core.bundle.has("unit." + this.name + ".name")){
-            Log.err("Warning: unit '" + name + "' is missing a localized name. Add the follow to bundle.properties:");
-            Log.err("unit." + this.name + ".name=" + Strings.capitalize(name.replace('-', '_')));
-        }
     }
 
     @Override
@@ -86,11 +76,6 @@ public class UnitType extends UnlockableContent{
     @Override
     public ContentType getContentType(){
         return ContentType.unit;
-    }
-
-    @Override
-    public String getContentName(){
-        return name;
     }
 
     public BaseUnit create(Team team){
