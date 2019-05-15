@@ -3,6 +3,7 @@ package io.anuke.mindustry.world.blocks.distribution;
 import io.anuke.annotations.Annotations.Struct;
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.IntArray;
+import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.distribution.Conveyor.ConveyorEntity;
 
@@ -33,6 +34,10 @@ public class ConveyorLine{
     /**@return whether the first conveyor in this line is the specified tile.*/
     public boolean beginsWith(Tile tile){
         return tiles.size > 0 && tiles.first() == tile;
+    }
+
+    public void handleItem(Tile tile, Item item){
+
     }
 
     /**adds a tile to this line.
