@@ -44,7 +44,7 @@ public class MapPlayDialog extends FloatingDialog{
 
             modes.addButton(mode.toString(), "toggle", () -> {
                 selectedGamemode = selectedGamemode == mode ? null : mode;
-                rules = mode.apply(map.rules());
+                rules = selectedGamemode == null ? map.rules() : mode.apply(map.rules());
             }).update(b -> b.setChecked(selectedGamemode == mode)).size(140f, 54f);
             if(i++ % 2 == 1) modes.row();
         }
@@ -94,8 +94,6 @@ public class MapPlayDialog extends FloatingDialog{
 
         show();
     }
-
-
 
     private void displayGameModeHelp(){
         FloatingDialog d = new FloatingDialog(Core.bundle.get("mode.help.title"));

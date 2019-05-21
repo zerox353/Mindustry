@@ -637,7 +637,12 @@ public class Player extends Unit implements BuilderTrait, ShooterTrait{
 
     protected void updateShooting(){
         if(!state.isEditor() && isShooting() && mech.canShoot(this)){
-            mech.weapon.update(this, pointerX, pointerY);
+            if(!mech.turnCursor){
+                //shoot forward ignoring cursor
+                mech.weapon.update(this, x + Angles.trnsx(rotation, 1f), y + Angles.trnsy(rotation, 1f));
+            }else{
+                mech.weapon.update(this, pointerX, pointerY);
+            }
         }
     }
 
@@ -782,6 +787,7 @@ public class Player extends Unit implements BuilderTrait, ShooterTrait{
         moveTarget = null;
         spawner = lastSpawner = null;
         health = maxHealth();
+        mining = null;
         boostHeat = drownTime = hitTime = 0f;
         mech = Mechs.starter;
         placeQueue.clear();
@@ -818,6 +824,7 @@ public class Player extends Unit implements BuilderTrait, ShooterTrait{
         this.lastSpawner = spawner;
         this.dead = true;
         setNet(spawner.getX(), spawner.getY());
+        spawner.updateSpawning(this);
     }
 
     //endregion

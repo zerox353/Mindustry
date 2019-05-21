@@ -1109,11 +1109,11 @@ public class Blocks implements ContentList{
             requirements(Category.power, ItemStack.with(Items.lead, 1000, Items.silicon, 600, Items.graphite, 800, Items.thorium, 200, Items.surgealloy, 500, Items.metaglass, 500));
             size = 4;
             health = 900;
-            powerProduction = 110f;
-            itemDuration = 60f;
+            powerProduction = 130f;
+            itemDuration = 90f;
             consumes.power(25f);
             consumes.item(Items.blastCompound);
-            consumes.liquid(Liquids.cryofluid, 0.26f);
+            consumes.liquid(Liquids.cryofluid, 0.25f);
         }};
 
         //endregion power
@@ -1151,7 +1151,7 @@ public class Blocks implements ContentList{
         }};
 
         blastDrill = new Drill("blast-drill"){{
-            requirements(Category.production, ItemStack.with(Items.copper, 130, Items.silicon, 120, Items.titanium, 100, Items.thorium, 60));
+            requirements(Category.production, ItemStack.with(Items.copper, 130, Items.silicon, 120, Items.titanium, 100, Items.thorium, 100));
             drillTime = 200;
             size = 4;
             drawRim = true;
