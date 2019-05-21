@@ -7,6 +7,7 @@ import io.anuke.arc.collection.IntArray;
 import io.anuke.arc.function.Consumer;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
+import io.anuke.arc.math.Angles;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Geometry;
 import io.anuke.arc.math.geom.Point2;
@@ -24,6 +25,8 @@ public class ConveyorLine{
     private static final int unitMult = 3000;
     /**spacing between items*/
     private static final int itemSpacing = unitMult / 3;
+    /**edges of the conveyor, rotated*/
+    private static final Point2[] edges = {new Point2(1, 1), new Point2(-1, 1), new Point2(-1, -1), new Point2(1, -1)};
     /**last frame drawn*/
     private long lastFrameID = -1;
     /**start and end tiles of this line*/
@@ -101,7 +104,11 @@ public class ConveyorLine{
             Tile on = get(length - 1 - offset / unitMult);
             ConveyorEntity ent = on.entity();
             if(ent.blendbits == 1){ //rotated
-
+                Point2 p = edges[on.rotation()];
+                int ex = p.x * ent.blendsclx, ey = p.y * ent.blendscly;
+                float degrees = ((offset/(float)unitMult)%1f)*90f;
+                x = on.worldx() + ex*tilesize/2f - ex*Angles.trnsx(degrees, tilesize/2f);
+                y = on.worldy() + ey*tilesize/2f - ey*Angles.trnsy(degrees, tilesize/2f);
             }
 
             Draw.rect(region, x, y, itemSize, itemSize);
