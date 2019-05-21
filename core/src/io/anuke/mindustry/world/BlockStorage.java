@@ -8,7 +8,6 @@ import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.effect.Puddle;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.entities.type.Unit;
 import io.anuke.mindustry.game.UnlockableContent;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.Liquid;
@@ -51,6 +50,15 @@ public abstract class BlockStorage extends UnlockableContent{
 
     public boolean outputsItems(){
         return hasItems;
+    }
+
+    /** Tries to handle an item, returns success.*/
+    public boolean handleAcceptItem(Item item, Tile tile, Tile src){
+        if(acceptItem(item, tile, src)){
+            handleItem(item, tile, src);
+            return true;
+        }
+        return false;
     }
 
     public boolean acceptItem(Item item, Tile tile){

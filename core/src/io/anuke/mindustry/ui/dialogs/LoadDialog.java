@@ -12,7 +12,6 @@ import io.anuke.mindustry.core.GameState.State;
 import io.anuke.mindustry.core.Platform;
 import io.anuke.mindustry.game.Saves.SaveSlot;
 import io.anuke.mindustry.io.SaveIO;
-import io.anuke.mindustry.io.SaveIO.SaveException;
 
 import java.io.IOException;
 
@@ -172,8 +171,8 @@ public class LoadDialog extends FloatingDialog{
             try{
                 slot.load();
                 state.set(State.playing);
-            }catch(SaveException e){
-                Log.err(e);
+            }catch(Exception e){
+               // Log.err(e);
                 state.set(State.menu);
                 logic.reset();
                 ui.showError("$save.corrupted");
@@ -184,7 +183,6 @@ public class LoadDialog extends FloatingDialog{
     public void modifyButton(TextButton button, SaveSlot slot){
         button.clicked(() -> {
             if(!button.childrenPressed()){
-                int build = slot.getBuild();
                 runLoadSave(slot);
             }
         });

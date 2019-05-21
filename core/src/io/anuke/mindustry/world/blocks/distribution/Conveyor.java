@@ -111,14 +111,16 @@ public class Conveyor extends Block{
     public void onProximityAdded(Tile tile){
         Tile facing = tile.facing();
         //find block of same type that this is facing, add if necessary and stop
-        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation()){
+        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation() &&
+            facing.<ConveyorEntity>entity().line != null){
             facing.<ConveyorEntity>entity().line.addLast(tile);
             return;
         }
 
         facing = tile.getNearby((tile.rotation() + 2)%4);
         //find block of same type that this is facing, add if necessary and stop
-        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation()){
+        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation() &&
+            facing.<ConveyorEntity>entity().line != null){
             facing.<ConveyorEntity>entity().line.addFirst(tile);
             return;
         }
@@ -164,7 +166,7 @@ public class Conveyor extends Block{
 
     @Override
     public boolean acceptItem(Item item, Tile tile, Tile source){
-        return false;
+        return true;
     }
 
     @Override

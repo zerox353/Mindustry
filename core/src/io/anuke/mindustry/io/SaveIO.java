@@ -2,6 +2,7 @@ package io.anuke.mindustry.io;
 
 import io.anuke.arc.collection.*;
 import io.anuke.arc.files.FileHandle;
+import io.anuke.arc.util.Log;
 import io.anuke.arc.util.io.CounterInputStream;
 import io.anuke.arc.util.io.FastDeflaterOutputStream;
 import io.anuke.mindustry.Vars;
@@ -145,6 +146,7 @@ public class SaveIO{
             //try and load; if any exception at all occurs
             load(new InflaterInputStream(file.read(bufferSize)), context);
         }catch(SaveException e){
+            Log.err("Failed to load save file: " + file + ", attempting backup loading.");
             e.printStackTrace();
             FileHandle backup = file.sibling(file.name() + "-backup." + file.extension());
             if(backup.exists()){
