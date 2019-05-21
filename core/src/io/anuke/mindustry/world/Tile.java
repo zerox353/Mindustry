@@ -295,6 +295,10 @@ public class Tile implements Position, TargetTrait{
         return getNearby(rotation);
     }
 
+    public Tile behind(){
+        return getNearby((rotation + 2)%4);
+    }
+
     public Tile getNearby(Point2 relative){
         return world.tile(x + relative.x, y + relative.y);
     }

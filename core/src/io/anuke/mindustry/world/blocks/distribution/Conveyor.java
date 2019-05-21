@@ -101,29 +101,26 @@ public class Conveyor extends Block{
     public void drawLayer(Tile tile){
         ConveyorEntity entity = tile.entity();
         Core.scene.skin.getFont("default-font").getData().setScale(0.25f);
-        Core.scene.skin.getFont("default-font").draw(entity.line.id + "", tile.drawx(), tile.drawy());
+        Core.scene.skin.getFont("default-font").draw((entity.line.hashCode() + "").substring(0, 2), tile.drawx(), tile.drawy());
         Core.scene.skin.getFont("default-font").getData().setScale(1f);
+
+        entity.line.draw();
     }
 
     @Override
     public void onProximityAdded(Tile tile){
         Tile facing = tile.facing();
         //find block of same type that this is facing, add if necessary and stop
-        if(facing != null && facing.block() == this){
-            ConveyorEntity oe = facing.entity();
-            if(oe.line.beginsWith(facing)){
-                oe.line.add(tile);
-                return;
-            }
+        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation()){
+            facing.<ConveyorEntity>entity().line.addLast(tile);
+            return;
         }
 
-        //find conveyors facing this block, get first one and add it
-        for(Tile near : tile.entity.proximity()){
-            if(near.block() == this && near.facing() == tile){
-                near.<ConveyorEntity>entity().line.add(tile);
-                //TODO proper merging in this case: > ^ <, where ^ is the last one to be placed
-                return;
-            }
+        facing = tile.getNearby((tile.rotation() + 2)%4);
+        //find block of same type that this is facing, add if necessary and stop
+        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation()){
+            facing.<ConveyorEntity>entity().line.addFirst(tile);
+            return;
         }
 
         //no line found, make a new one

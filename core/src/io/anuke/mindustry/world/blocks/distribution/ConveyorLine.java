@@ -1,119 +1,158 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
 import io.anuke.annotations.Annotations.Struct;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.IntArray;
+import io.anuke.annotations.Annotations.StructField;
+import io.anuke.arc.Core;
+import io.anuke.arc.collection.IntQueue;
+import io.anuke.arc.function.Consumer;
+import io.anuke.arc.math.Mathf;
+import io.anuke.arc.math.geom.Geometry;
+import io.anuke.mindustry.gen.ItemPos;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.distribution.Conveyor.ConveyorEntity;
 
+import static io.anuke.mindustry.Vars.world;
+
 /**Stores one continuous line of conveyors with one input and one output.*/
 public class ConveyorLine{
-    private static int lastID;
-    /**all tiles in this line, unordered (fix?)*/
-    private final Array<Tile> tiles = new Array<>();
+    /**distance units per conveyor block*/
+    private static final int unitMult = 3000;
+    /**spacing between items*/
+    private static final int itemSpacing = unitMult / 3;
+    /**last frame drawn*/
+    private long lastFrameID = -1;
+    /**start and end tiles of this line*/
+    private Tile start, end;
     /**items, sorted from back of conveyor to front of conveyor.*/
-    private final IntArray items = new IntArray();
+    private final IntQueue items = new IntQueue();
     /**seed that updates this line*/
-    private final Tile seed;
-    /**movement speed of items*/
-    private final float speed;
-    /**ID for debugging purposes*/
-    public final int id;
+    private Tile seed;
+    /**movement speed of items in units*/
+    private final int speed;
+
+    private int index = 0;
 
     public ConveyorLine(Tile seed){
         //add seed entity so it updates
         this.seed = seed;
         this.seed.entity.add();
-        this.id = lastID++;
-        this.speed = ((Conveyor)seed.block()).speed;
+        this.speed = (int)(((Conveyor)seed.block()).speed * unitMult);
         this.seed.<ConveyorEntity>entity().line = this;
-        this.tiles.add(seed);
-    }
-
-    /**@return whether the first conveyor in this line is the specified tile.*/
-    public boolean beginsWith(Tile tile){
-        return tiles.size > 0 && tiles.first() == tile;
+        this.start = this.end = seed;
     }
 
     public void handleItem(Tile tile, Item item){
-
+        items.addFirst(ItemPos.get((byte)item.id, (short)0));
     }
 
-    /**adds a tile to this line.
-     * there are 2 possibilities:
-     * 1) this tile is facing a tile in the line
-     * 2) a tile in this line is facing this tile
-     */
-    public void add(Tile tile){
-        tile.<ConveyorEntity>entity().line = this;
-        tiles.add(tile);
-        //backflow, find what's facing this tile
-        //it doesn't really matter what *this* tile is facing, because it can't be a different line; facing takes priority
-        for(Tile near : tile.entity.proximity()){
-            if(near.block() != seed.block() || near.facing() != tile) continue;
-
-            ConveyorEntity entity = near.entity();
-
-            //found a line, merge and stop.
-            if(entity.line != this){
-                entity.line.merge(this);
-                return;
-            }
-        }
-    }
-
-    public void remove(Tile tile){
-        if(tile == seed){
-            //remove tile entity if it's in the seed so it stops updating
-            tile.entity.remove();
-        }
-
-        //no tiles left, stop, this line is dead
-        if(tiles.size == 1 && tiles.first() == tile){
+    public void draw(){
+        if(lastFrameID == Core.graphics.getFrameId()){
             return;
         }
 
-        //find index of tile, everything below it will be split off
-        int index = tiles.indexOf(tile);
+        lastFrameID = Core.graphics.getFrameId();
+        int offset = 0;
+        int dx = Geometry.d4[end.rotation()].x, dy = Geometry.d4[end.rotation()].y;
 
-        //make sure another conveyor line is needed
-        if(index == tiles.size - 1){
-            //last element is removed, end there
-            //TODO remove items
-            tiles.pop();
-        }else if(index != 0){
-            ConveyorLine line = new ConveyorLine(tiles.get(0));
-            //reparent all tiles to new line below this one
-            for(int i = 0; i < index; i++){
-                //TODO add items
-                tiles.get(index).<ConveyorEntity>entity().line = line;
-                line.tiles.add(tiles.get(index));
-            }
-            //TODO remove items in range
-            //remove all tiles in the range.
-            tiles.removeRange(0, index);
-        }else{
-            //TODO remove items
-            //if not, just remove that tile (at back) and be done
-            tiles.remove(0);
+        for(int i = 0; i < items.size; i++){
+            int item = items.get(i);
         }
     }
 
-    /**merges a line with another line which is directly in front.*/
+    /** adds a tile to the tail of this line.*/
+    public void addLast(Tile tile){
+        start = tile;
+
+        Tile next = tile.getNearby((tile.rotation() + 2) % 4);
+
+        if(next != null && next.rotation() == tile.rotation() && next.block() == tile.block()){
+            next.<ConveyorEntity>entity().line.merge(this);
+        }
+    }
+
+    /** adds a tile to the head of this line.*/
+    public void addFirst(Tile tile){
+        end = tile;
+        Tile next = tile.getNearby(tile.rotation());
+
+        if(next != null && next.rotation() == tile.rotation() && next.block() == tile.block()){
+            merge(next.<ConveyorEntity>entity().line);
+        }
+    }
+
+    //TODO remove items
+    public void remove(Tile tile){
+        if(tile == end){ //tile is at end, move it back
+            end = end.behind();
+        }else if(tile == start){ //tile is at start, move it forward
+            start = start.facing();
+        }else if(start != end){ //only run this if there's still tiles left here
+            if(seed != start){
+                seed.entity.remove();
+                seed = start;
+                seed.entity.add();
+            }
+
+            Tile oldEnd = end;
+            Tile newStart = tile.facing();
+            end = tile.behind();
+
+            ConveyorLine line = new ConveyorLine(newStart);
+            line.end = oldEnd;
+            line.start = newStart;
+            //reparent tiles greater in index
+            each(other -> {
+                if(index(other) > index(tile)){
+                    other.<ConveyorEntity>entity().line = line;
+                }
+            });
+        }
+    }
+
+    /** merges a line with another line, which must be directly in front.*/
     public void merge(ConveyorLine other){
         //remove other's entity to stop double updates
         other.seed.entity.remove();
-        tiles.addAll(other.tiles);
+        end = other.end;
         //reparent lines
-        for(Tile tile : other.tiles){
-            tile.<ConveyorEntity>entity().line = this;
+        other.each(tile -> tile.<ConveyorEntity>entity().line = this);
+
+        //add all items
+        for(int i = 0; i < other.items.size; i++){
+            items.addLast(other.items.get(i));
         }
-        //TODO merge items
     }
 
     public void update(){
-        //TODO move items
+        int head = items.get(index);
+        int offset = ItemPos.space(head);
+        byte item = ItemPos.item(head);
+
+    }
+
+    public int index(Tile tile){
+        if(end.x == start.x){ //vertical
+            return Math.max(tile.y - start.y, tile.y - end.y);
+        }else{ //horizontal
+            return Math.max(tile.x - start.x, tile.x - end.x);
+        }
+    }
+
+    public void each(Consumer<Tile> cons){
+        if(end.x == start.x){ //vertical
+            int len = Math.abs(start.y - end.y);
+            int sign = Mathf.sign(end.y - start.y);
+            for(int i = 0; i <= len; i++){
+                cons.accept(world.tile(start.x, start.y + sign*i));
+            }
+        }else{ //horizontal
+            int len = Math.abs(start.x - end.x);
+            int sign = Mathf.sign(end.x - start.x);
+            for(int i = 0; i <= len; i++){
+                cons.accept(world.tile(start.x + sign*i, start.y));
+            }
+        }
     }
 
     //size: 1 int
@@ -121,9 +160,8 @@ public class ConveyorLine{
     class ItemPosStruct{
         /**item ID*/
         byte item;
-        /**item x tilt; -127 would be left side of conveyor while 127 would be right*/
-        byte tilt;
-        /**item position in conveyor line*/
-        short position;
+        /**item position in conveyor line relative to the last item*/
+        @StructField(24)
+        short space;
     }
 }
