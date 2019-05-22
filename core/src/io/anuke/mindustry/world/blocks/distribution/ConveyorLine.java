@@ -187,13 +187,19 @@ public class ConveyorLine{
                     items.set(endidx - 1, ItemPos.get(ItemPos.item(prev), ItemPos.space(prev) - (unitMult - sum)));
                 }
                 index --; //move index back
-                items.removeRange(endidx, items.size - 1);
+                items.removeRange(Math.min(endidx + 1, items.size - 1), items.size - 1);
+            }else if(!items.isEmpty()){ //remove everything, as it is all in the end
+                items.clear();
+                maxOffset = 0;
+                index = 0;
             }
 
+            maxOffset -= unitMult;
+            if(maxOffset < 0) maxOffset = 0;
             end = end.behind();
         }else if(tile == start){ //tile is at start, move it forward
             int sum = 0;
-            //items [endidx...size] are removed from the end, as they are on this tile
+            //items [0..startidx] are removed from the end, as they are on this tile
             int startidx = -1;
             int beginOffset = (length() - 1)*unitMult;
             for(int i = items.size - 1; i >= 0; i--){
@@ -206,7 +212,7 @@ public class ConveyorLine{
             }
 
             if(startidx != -1){
-                items.removeRange(0, startidx);
+                items.removeRange(0, Math.min(startidx + 1, items.size-1));
                 maxOffset = sum;
             }
 
@@ -250,7 +256,7 @@ public class ConveyorLine{
 
             if(reparentTo != -1){
                 //move out all items to the new line, set up max offset based on that
-                line.items.addAll(items, reparentTo, items.size - 1);
+                line.items.addAll(items, reparentTo, items.size - 1 - reparentTo);
                 int max = 0;
                 for(int i = 0; i < line.items.size; i++){
                     max += ItemPos.space(line.items.get(i));
