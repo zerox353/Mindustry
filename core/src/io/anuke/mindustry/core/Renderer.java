@@ -183,7 +183,7 @@ public class Renderer implements ApplicationListener{
         blocks.drawBlocks(Layer.placement);
         Draw.shader();
 
-        blocks.drawBlocks(Layer.overlay);
+        blocks.drawBlocks(Layer.conveyor);
 
         drawGroundShadows();
 

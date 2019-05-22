@@ -186,6 +186,7 @@ public class BlockRenderer implements Disposable{
         int miny = Math.max(avgy - rangey - expandr, 0);
         int maxx = Math.min(world.width() - 1, avgx + rangex + expandr);
         int maxy = Math.min(world.height() - 1, avgy + rangey + expandr);
+        boolean hasConveyors = false;
 
         for(int x = minx; x <= maxx; x++){
             for(int y = miny; y <= maxy; y++){
@@ -203,6 +204,10 @@ public class BlockRenderer implements Disposable{
 
                         if(block.layer != null){
                             addRequest(tile, block.layer);
+
+                            if(block.layer == Layer.conveyor){
+                                hasConveyors = true;
+                            }
                         }
 
                         if(block.layer2 != null){
@@ -222,6 +227,25 @@ public class BlockRenderer implements Disposable{
         }
 
         Sort.instance().sort(requests.items, 0, requestidx);
+
+        //TODO implement conveyor sorting by succession
+        if(hasConveyors && false){
+            int startConveyor = -1, endConveyor = requestidx - 1;
+            for(int i = 0; i < requestidx; i++){
+                if(startConveyor == -1){
+                    if(requests.items[i].layer == Layer.conveyor){
+                        startConveyor = i;
+                    }
+                }else if(requests.items[i].layer != Layer.conveyor){
+                    endConveyor = i;
+                    break;
+                }
+            }
+
+            Sort.instance().sort(requests.items, (a, b) -> {
+              return 0;
+            }, startConveyor, endConveyor);
+        }
 
         lastCamX = avgx;
         lastCamY = avgy;

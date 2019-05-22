@@ -57,9 +57,9 @@ public class ConveyorLine{
         return maxOffset <= rawDst - itemSpacing;
     }
 
-    public void handleItem(Tile tile, Item item){
+    public void handleItem(Tile tile, Item item, int offset){
         //distance in conveyor units from end
-        int rawDst = (1 + Math.max(Math.abs(tile.x - end.x), Math.abs(tile.y - end.y))) * unitMult;
+        int rawDst = (1 + Math.max(Math.abs(tile.x - end.x), Math.abs(tile.y - end.y))) * unitMult + offset;
         int total = 0;
         int lastTotal = 0;
         maxOffset = Math.max(rawDst, maxOffset);
@@ -315,16 +315,17 @@ public class ConveyorLine{
         //check item at front every frame to make sure it can move
         int hitem = items.peek();
         int hoffset = ItemPos.space(hitem);
-        if(hoffset == 0){
+        if(hoffset <= 0){
             Tile next = end.facing();
             if(next != null) next = next.link();
             Item citem = content.item(hitem);
             //if the item can be handled, remove it
-            //TODO when passing items directly to conveyors, keep the extra movement delta, allow negative offset values when passing without blockage
-            if(next != null && next.block().handleAcceptItem(citem, next, end)){
+            if(tryMoveItem(hitem, next)){
                 items.pop();
                 index = 0; //reset to index 0, as items there can move now
             }else if(index == 0){
+                //if passing doesn't work, reset the head index to 0 to prevent massive negative overflows
+                items.set(items.size - 1, ItemPos.get((byte)citem.id, 0));
                 //otherwise, go to the next item to move it forward since this one is stuck
                 index++;
             }
@@ -353,6 +354,24 @@ public class ConveyorLine{
 
             //move max offset back every frame
             maxOffset -= (offset - newOffset);
+        }
+    }
+
+    private boolean tryMoveItem(int itemp, Tile next){
+        Item citem = content.item(itemp);
+        if(next == null){
+            return false;
+        }
+
+        if(next.block() instanceof Conveyor){
+            if(next.block().acceptItem(citem, next, end)){
+                ConveyorLine line = next.<ConveyorEntity>entity().line;
+                line.handleItem(next, citem, ItemPos.space(itemp));
+                return true;
+            }
+            return false;
+        }else{
+            return next.block().handleAcceptItem(citem, next, end);
         }
     }
 

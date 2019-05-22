@@ -5,8 +5,8 @@ public enum Layer{
     block,
     /** for placement */
     placement,
-    /** First overlay. Stuff like conveyor items. */
-    overlay,
+    /** Only conveyor items. */
+    conveyor,
     /** "High" blocks, like turrets. */
     turret,
     /** Power lasers. */

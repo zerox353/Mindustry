@@ -4,7 +4,6 @@ import io.anuke.arc.Core;
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.mindustry.graphics.Layer;
 import io.anuke.mindustry.type.Liquid;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.LiquidBlock;
@@ -21,7 +20,6 @@ public class Pump extends LiquidBlock{
 
     public Pump(String name){
         super(name);
-        layer = Layer.overlay;
         liquidFlowFactor = 3f;
         group = BlockGroup.liquids;
         floating = true;

@@ -5,7 +5,6 @@ import io.anuke.arc.graphics.g2d.Fill;
 import io.anuke.arc.math.Mathf;
 import io.anuke.mindustry.entities.effect.Lightning;
 import io.anuke.mindustry.entities.type.Unit;
-import io.anuke.mindustry.graphics.Layer;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
@@ -25,16 +24,6 @@ public class ShockMine extends Block{
         destructible = true;
         solid = false;
         targetable = false;
-        layer = Layer.overlay;
-    }
-
-    @Override
-    public void drawLayer(Tile tile){
-        super.draw(tile);
-        Draw.color(tile.getTeam().color);
-        Draw.alpha(0.22f);
-        Fill.rect(tile.drawx(), tile.drawy(), 2f, 2f);
-        Draw.color();
     }
 
     @Override
@@ -44,7 +33,11 @@ public class ShockMine extends Block{
 
     @Override
     public void draw(Tile tile){
-        //nope
+        super.draw(tile);
+        Draw.color(tile.getTeam().color);
+        Draw.alpha(0.22f);
+        Fill.rect(tile.drawx(), tile.drawy(), 2f, 2f);
+        Draw.color();
     }
 
     @Override

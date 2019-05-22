@@ -26,7 +26,7 @@ public class Conveyor extends Block{
         //this entity is removed in the end
         rotate = true;
         destructible = true;
-        layer = Layer.overlay;
+        layer = Layer.conveyor;
         group = BlockGroup.transportation;
         hasItems = true;
         itemCapacity = 4;
@@ -169,7 +169,7 @@ public class Conveyor extends Block{
     @Override
     public void handleItem(Item item, Tile tile, Tile source){
         ConveyorEntity entity = tile.entity();
-        entity.line.handleItem(tile, item);
+        entity.line.handleItem(tile, item, 0);
     }
 
     @Override

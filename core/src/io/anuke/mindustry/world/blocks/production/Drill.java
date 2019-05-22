@@ -14,7 +14,6 @@ import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.Effects.Effect;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.graphics.Layer;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.ItemType;
@@ -62,7 +61,6 @@ public class Drill extends Block{
         super(name);
         update = true;
         solid = true;
-        layer = Layer.overlay;
         group = BlockGroup.drills;
         hasLiquids = true;
         liquidCapacity = 5f;
