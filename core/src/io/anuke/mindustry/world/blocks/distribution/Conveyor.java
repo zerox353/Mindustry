@@ -100,10 +100,6 @@ public class Conveyor extends Block{
     @Override
     public void drawLayer(Tile tile){
         ConveyorEntity entity = tile.entity();
-        Core.scene.skin.getFont("default-font").getData().setScale(0.25f);
-        Core.scene.skin.getFont("default-font").draw((entity.line.hashCode() + "").substring(0, 2), tile.drawx(), tile.drawy());
-        Core.scene.skin.getFont("default-font").getData().setScale(1f);
-
         entity.line.draw();
     }
 
@@ -166,7 +162,8 @@ public class Conveyor extends Block{
 
     @Override
     public boolean acceptItem(Item item, Tile tile, Tile source){
-        return true;
+        ConveyorEntity entity = tile.entity();
+        return entity.line.acceptItem(tile);
     }
 
     @Override

@@ -3,6 +3,7 @@ package io.anuke.mindustry.world.blocks.distribution;
 import io.anuke.annotations.Annotations.Struct;
 import io.anuke.annotations.Annotations.StructField;
 import io.anuke.arc.Core;
+import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.IntArray;
 import io.anuke.arc.function.Consumer;
 import io.anuke.arc.graphics.g2d.Draw;
@@ -12,6 +13,7 @@ import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Geometry;
 import io.anuke.arc.math.geom.Point2;
 import io.anuke.arc.util.Time;
+import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.gen.ItemPos;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.world.Tile;
@@ -39,6 +41,7 @@ public class ConveyorLine{
     private final int speed;
 
     private int index = 0;
+    private int maxOffset = 0;
 
     public ConveyorLine(Tile seed){
         //add seed entity so it updates
@@ -49,11 +52,17 @@ public class ConveyorLine{
         this.start = this.end = seed;
     }
 
+    public boolean acceptItem(Tile tile){
+        int rawDst = (1 + Math.max(Math.abs(tile.x - end.x), Math.abs(tile.y - end.y))) * unitMult;
+        return maxOffset <= rawDst - itemSpacing;
+    }
+
     public void handleItem(Tile tile, Item item){
         //distance in conveyor units from end
         int rawDst = (1 + Math.max(Math.abs(tile.x - end.x), Math.abs(tile.y - end.y))) * unitMult;
         int total = 0;
         int lastTotal = 0;
+        maxOffset = Math.max(rawDst, maxOffset);
         for(int i = items.size - 1; i >= 0; i--){
             int curr = items.get(i);
             total += ItemPos.space(curr);
@@ -66,8 +75,10 @@ public class ConveyorLine{
                 }else{
                     items.insert(inserti, result);
                 }
+
+                int finalDst = ItemPos.space(curr) - (rawDst - lastTotal);
                 //update previous item's distance
-                items.set(i, ItemPos.get(ItemPos.item(curr), ItemPos.space(curr) - (rawDst - lastTotal)));
+                items.set(i, ItemPos.get(ItemPos.item(curr), finalDst));
                 return;
             }
 
@@ -101,12 +112,13 @@ public class ConveyorLine{
             TextureRegion region = content.item(ItemPos.item(item)).icon(Item.Icon.medium);
             float posOffset = offset / (float)unitMult * tilesize;
             float x = startX + dx*posOffset, y = startY + dy*posOffset;
-            Tile on = get(length - 1 - offset / unitMult);
+            Tile on = get(Mathf.clamp(length - 1 - offset / unitMult, 0, length - 1));
             ConveyorEntity ent = on.entity();
-            if(ent.blendbits == 1){ //rotated
-                Point2 p = edges[on.rotation()];
+            if(ent.blendbits == 1){
+                int rot = ent.blendscly == -1 && on.rotation() % 2 == 1 ? (on.rotation() + 2) % 4 : on.rotation();
+                Point2 p = edges[rot];
                 int ex = p.x * ent.blendsclx, ey = p.y * ent.blendscly;
-                float degrees = ((offset/(float)unitMult)%1f)*90f;
+                float degrees = rot % 2 == 0 ? (1f-(((offset-1)/(float)unitMult)%1f))*90f : ((((offset-1)/(float)unitMult)%1f))*90f;
                 x = on.worldx() + ex*tilesize/2f - ex*Angles.trnsx(degrees, tilesize/2f);
                 y = on.worldy() + ey*tilesize/2f - ey*Angles.trnsy(degrees, tilesize/2f);
             }
@@ -120,7 +132,7 @@ public class ConveyorLine{
         tile.<ConveyorEntity>entity().line = this;
         start = tile;
 
-        Tile next = tile.getNearby((tile.rotation() + 2) % 4);
+        Tile next = tile.behind();
 
         if(next != null && next.rotation() == tile.rotation() && next.block() == tile.block()){
             next.<ConveyorEntity>entity().line.merge(this);
@@ -131,7 +143,8 @@ public class ConveyorLine{
     public void addFirst(Tile tile){
         tile.<ConveyorEntity>entity().line = this;
         end = tile;
-        Tile next = tile.getNearby(tile.rotation());
+
+        Tile next = tile.facing();
 
         //offset item at head by spacing
         if(items.size > 0){
@@ -141,14 +154,62 @@ public class ConveyorLine{
 
         if(next != null && next.rotation() == tile.rotation() && next.block() == tile.block()){
             merge(next.<ConveyorEntity>entity().line);
+        }else if(next != null && next.block() == tile.block()){
+            ConveyorLine line = next.<ConveyorEntity>entity().line;
+            Array<TileEntity> entities = tileGroup.all();
+            int idx1 = entities.indexOf(seed.entity);
+            int idx2 = entities.indexOf(line.seed.entity);
+            if(idx1 != -1 && idx2 != -1 && idx2 > idx1){
+                entities.swap(idx1, idx2);
+            }
         }
     }
 
     //TODO remove items
     public void remove(Tile tile){
         if(tile == end){ //tile is at end, move it back
+            int sum = 0;
+            //items [endidx...size] are removed from the end, as they are on this tile
+            int endidx = items.size;
+            for(int i = items.size - 1; i >= 0; i--){
+                if(sum + ItemPos.space(items.get(i)) > unitMult){
+                    endidx = i;
+                    break;
+                }else{
+                    sum += ItemPos.space(items.get(i));
+                }
+            }
+
+            if(endidx != items.size){
+                if(endidx - 1 >= 0){
+                    int prev = items.get(endidx - 1);
+                    //offset item at the end by the remainder
+                    items.set(endidx - 1, ItemPos.get(ItemPos.item(prev), ItemPos.space(prev) - (unitMult - sum)));
+                }
+                index --; //move index back
+                items.removeRange(endidx, items.size - 1);
+            }
+
             end = end.behind();
         }else if(tile == start){ //tile is at start, move it forward
+            int sum = 0;
+            //items [endidx...size] are removed from the end, as they are on this tile
+            int startidx = -1;
+            int beginOffset = (length() - 1)*unitMult;
+            for(int i = items.size - 1; i >= 0; i--){
+                if(sum + ItemPos.space(items.get(i)) > beginOffset){
+                    startidx = i;
+                    break;
+                }else{
+                    sum += ItemPos.space(items.get(i));
+                }
+            }
+
+            if(startidx != -1){
+                items.removeRange(0, startidx);
+                maxOffset = sum;
+            }
+
             start = start.facing();
         }else if(start != end){ //only run this if there's still tiles left here
             if(seed != start){
@@ -172,7 +233,7 @@ public class ConveyorLine{
 
             int sum = 0;
             int removeLen = (line.length() + 1) * unitMult, reparentLen = line.length() * unitMult;
-            int removeTo = 0, reparentTo = 0;
+            int removeTo = -1, reparentTo = -1;
 
             for(int i = 0; i < items.size; i++){
                 sum += ItemPos.space(items.items[i]);
@@ -187,7 +248,31 @@ public class ConveyorLine{
                 }
             }
 
+            if(reparentTo != -1){
+                //move out all items to the new line, set up max offset based on that
+                line.items.addAll(items, reparentTo, items.size - 1);
+                int max = 0;
+                for(int i = 0; i < line.items.size; i++){
+                    max += ItemPos.space(line.items.get(i));
+                }
+                line.maxOffset = max;
+            }
 
+            //remove items from this line
+            if(removeTo != -1){
+                int tweaki = removeTo - 1;
+                if(tweaki >= 0){
+                    int it = items.get(tweaki);
+                    int removeLength = (line.length() + 1) * unitMult;
+                    int nextOffset = 0;
+                    for(int i = removeTo; i < items.size - 1; i++){
+                        nextOffset += ItemPos.space(items.get(i));
+                    }
+                    //properly offset the head item on this belt
+                    items.set(tweaki, ItemPos.get(ItemPos.item(it), ItemPos.space(it) - (removeLength - nextOffset)));
+                }
+                items.removeRange(removeTo, items.size - 1);
+            }
 
             end = tile.behind();
         }
@@ -222,7 +307,10 @@ public class ConveyorLine{
 
     public void update(){
         //nothing to update
-        if(items.isEmpty()) return;
+        if(items.isEmpty()){
+            maxOffset = 0;
+            return;
+        }
 
         //check item at front every frame to make sure it can move
         int hitem = items.peek();
@@ -232,6 +320,7 @@ public class ConveyorLine{
             if(next != null) next = next.link();
             Item citem = content.item(hitem);
             //if the item can be handled, remove it
+            //TODO when passing items directly to conveyors, keep the extra movement delta, allow negative offset values when passing without blockage
             if(next != null && next.block().handleAcceptItem(citem, next, end)){
                 items.pop();
                 index = 0; //reset to index 0, as items there can move now
@@ -242,6 +331,9 @@ public class ConveyorLine{
         }else{
             index = 0;
         }
+
+        //nothing to update, re-check as an item may have been popped
+        if(items.isEmpty()) return;
 
         //update other head item
         index = Mathf.clamp(index, 0, items.size - 1);
@@ -256,7 +348,11 @@ public class ConveyorLine{
         }else{
             //else, move item forward
             int moved = Math.max(1, (int)(Time.delta() * speed));
-            items.set(arridx, ItemPos.get(item, Math.max(offset - moved, index == 0 ? 0 : itemSpacing)));
+            int newOffset = Math.max(offset - moved, index == 0 ? 0 : itemSpacing);
+            items.set(arridx, ItemPos.get(item, newOffset));
+
+            //move max offset back every frame
+            maxOffset -= (offset - newOffset);
         }
     }
 
