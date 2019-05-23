@@ -151,6 +151,7 @@ public class ConveyorLine{
         if(items.size > 0){
             int src = items.peek();
             items.set(items.size - 1, ItemPos.get(ItemPos.item(src), ItemPos.space(src) + unitMult));
+            maxOffset += unitMult;
         }
 
         if(next != null && next.rotation() == tile.rotation() && next.block() == tile.block()){
@@ -234,7 +235,7 @@ public class ConveyorLine{
                 seed.entity.add();
             }
             start = start.facing();
-        }else{ //only run this if there's still tiles left here
+        }else{ //conveyor removed somewhere that's on on the ends... augh
             if(seed != start){
                 seed.entity.remove();
                 seed = start;
@@ -296,8 +297,10 @@ public class ConveyorLine{
                 }
                 items.removeRange(removeTo, items.size - 1);
             }else if(!items.isEmpty()){ //nothing to remove from this line, but there may be items on this line to be tweaked
-                int head = items.first();
+                int head = items.peek();
                 items.set(items.size - 1, ItemPos.get(ItemPos.item(head), ItemPos.space(head) - removeLen));
+                //max offset moves back too
+                maxOffset -= removeLen;
             }
 
             end = tile.behind();
@@ -316,6 +319,10 @@ public class ConveyorLine{
         int total = 0;
         for(int i = 0; i < other.items.size; i++){
             total += ItemPos.space(other.items.items[i]);
+        }
+
+        if(!items.isEmpty()){
+            maxOffset += other.length()*unitMult;
         }
 
         items.addAll(other.items);
@@ -403,9 +410,9 @@ public class ConveyorLine{
 
     public int index(Tile tile){
         if(end.x == start.x){ //vertical
-            return Math.max(tile.y - start.y, tile.y - end.y);
+            return Math.abs(tile.y - start.y);
         }else{ //horizontal
-            return Math.max(tile.x - start.x, tile.x - end.x);
+            return Math.abs(tile.x - start.x);
         }
     }
 
