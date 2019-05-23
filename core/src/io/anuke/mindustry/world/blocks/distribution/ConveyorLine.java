@@ -16,6 +16,7 @@ import io.anuke.arc.util.Time;
 import io.anuke.mindustry.entities.type.TileEntity;
 import io.anuke.mindustry.gen.ItemPos;
 import io.anuke.mindustry.type.Item;
+import io.anuke.mindustry.type.Item.Icon;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.distribution.Conveyor.ConveyorEntity;
 
@@ -109,7 +110,7 @@ public class ConveyorLine{
         for(int i = items.size - 1; i >= 0; i --){
             int item = items.get(i);
             offset += ItemPos.space(item);
-            TextureRegion region = content.item(ItemPos.item(item)).icon(Item.Icon.medium);
+            TextureRegion region = content.item(ItemPos.item(item)).icon(Icon.conveyor);
             float posOffset = offset / (float)unitMult * tilesize;
             float x = startX + dx*posOffset, y = startY + dy*posOffset;
             Tile on = get(Mathf.clamp(length - 1 - offset / unitMult, 0, length - 1));
@@ -165,12 +166,16 @@ public class ConveyorLine{
         }
     }
 
-    //TODO remove items
     public void remove(Tile tile){
-        if(tile == end){ //tile is at end, move it back
+        if(start == end){
+            if(tile != start){
+                throw new IllegalArgumentException("Attempt to remove tile not in the conveyor: " + start + " != " + tile);
+            }
+            items.clear();
+        }else if(tile == end){ //tile is at end, move it back
             int sum = 0;
             //items [endidx...size] are removed from the end, as they are on this tile
-            int endidx = items.size;
+            int endidx = -1;
             for(int i = items.size - 1; i >= 0; i--){
                 if(sum + ItemPos.space(items.get(i)) > unitMult){
                     endidx = i;
@@ -180,14 +185,16 @@ public class ConveyorLine{
                 }
             }
 
-            if(endidx != items.size){
-                if(endidx - 1 >= 0){
-                    int prev = items.get(endidx - 1);
-                    //offset item at the end by the remainder
-                    items.set(endidx - 1, ItemPos.get(ItemPos.item(prev), ItemPos.space(prev) - (unitMult - sum)));
+            if(endidx != -1){
+                int prev = items.get(endidx);
+                //offset item at the end by the remainder
+                items.set(endidx, ItemPos.get(ItemPos.item(prev), ItemPos.space(prev) - (unitMult - sum)));
+
+                index = 0;
+                //only remove if there's actually something to remove; if the first item is out of bounds, ignore it
+                if(endidx + 1 < items.size){
+                    items.removeRange(endidx + 1, items.size - 1);
                 }
-                index --; //move index back
-                items.removeRange(Math.min(endidx + 1, items.size - 1), items.size - 1);
             }else if(!items.isEmpty()){ //remove everything, as it is all in the end
                 items.clear();
                 maxOffset = 0;
@@ -196,6 +203,11 @@ public class ConveyorLine{
 
             maxOffset -= unitMult;
             if(maxOffset < 0) maxOffset = 0;
+            if(seed == end){
+                seed.entity.remove();
+                seed = end.behind();
+                seed.entity.add();
+            }
             end = end.behind();
         }else if(tile == start){ //tile is at start, move it forward
             int sum = 0;
@@ -216,8 +228,13 @@ public class ConveyorLine{
                 maxOffset = sum;
             }
 
+            if(seed == start){
+                seed.entity.remove();
+                seed = start.facing();
+                seed.entity.add();
+            }
             start = start.facing();
-        }else if(start != end){ //only run this if there's still tiles left here
+        }else{ //only run this if there's still tiles left here
             if(seed != start){
                 seed.entity.remove();
                 seed = start;
@@ -241,7 +258,7 @@ public class ConveyorLine{
             int removeLen = (line.length() + 1) * unitMult, reparentLen = line.length() * unitMult;
             int removeTo = -1, reparentTo = -1;
 
-            for(int i = 0; i < items.size; i++){
+            for(int i = items.size - 1; i >= 0; i--){
                 sum += ItemPos.space(items.items[i]);
 
                 if(sum < reparentLen){
@@ -256,7 +273,7 @@ public class ConveyorLine{
 
             if(reparentTo != -1){
                 //move out all items to the new line, set up max offset based on that
-                line.items.addAll(items, reparentTo, items.size - 1 - reparentTo);
+                line.items.addAll(items, reparentTo, items.size - reparentTo);
                 int max = 0;
                 for(int i = 0; i < line.items.size; i++){
                     max += ItemPos.space(line.items.get(i));
@@ -278,6 +295,9 @@ public class ConveyorLine{
                     items.set(tweaki, ItemPos.get(ItemPos.item(it), ItemPos.space(it) - (removeLength - nextOffset)));
                 }
                 items.removeRange(removeTo, items.size - 1);
+            }else if(!items.isEmpty()){ //nothing to remove from this line, but there may be items on this line to be tweaked
+                int head = items.first();
+                items.set(items.size - 1, ItemPos.get(ItemPos.item(head), ItemPos.space(head) - removeLen));
             }
 
             end = tile.behind();
@@ -292,22 +312,18 @@ public class ConveyorLine{
         //reparent lines
         other.each(tile -> tile.<ConveyorEntity>entity().line = this);
         int toChange = items.size - 1;
-        int lenOffset = 0;
 
-        if(items.size != 0){
-            int total = 0;
-            for(int i = 0; i < other.items.size; i++){
-                total += ItemPos.space(other.items.items[i]);
-            }
-            lenOffset = unitMult*other.length() - total;
+        int total = 0;
+        for(int i = 0; i < other.items.size; i++){
+            total += ItemPos.space(other.items.items[i]);
         }
 
         items.addAll(other.items);
 
         //merge last item properly
-        if(toChange > 0){
+        if(toChange >= 0){
             int src = items.get(toChange);
-            items.set(toChange, ItemPos.get(ItemPos.item(src), ItemPos.space(src) + lenOffset));
+            items.set(toChange, ItemPos.get(ItemPos.item(src), ItemPos.space(src) + (unitMult*other.length() - total)));
         }
     }
 

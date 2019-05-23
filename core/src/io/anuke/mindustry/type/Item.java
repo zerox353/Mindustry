@@ -88,6 +88,7 @@ public class Item extends UnlockableContent implements Comparable<Item>{
     }
 
     public enum Icon{
+        conveyor(20),
         small(8 * 2),
         medium(8 * 3),
         large(8 * 4),
