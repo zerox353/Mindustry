@@ -9,7 +9,6 @@ import io.anuke.mindustry.content.*;
 import io.anuke.mindustry.core.GameState.State;
 import io.anuke.mindustry.core.*;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
-import io.anuke.mindustry.entities.type.BaseUnit;
 import io.anuke.mindustry.entities.type.base.Spirit;
 import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.io.BundleLoader;
@@ -369,22 +368,20 @@ public class ApplicationTests{
     }
 
     void depositTest(Block block, Item item){
-        BaseUnit unit = UnitTypes.spirit.create(Team.none);
         Tile tile = new Tile(0, 0, Blocks.air.id, (byte)0, block.id);
         int capacity = tile.block().itemCapacity;
 
         assertNotNull(tile.entity, "Tile should have an entity, but does not: " + tile);
 
-        int deposited = tile.block().acceptStack(item, capacity - 1, tile, unit);
-        assertEquals(capacity - 1, deposited);
-
-        tile.block().handleStack(item, capacity - 1, tile, unit);
-        assertEquals(tile.entity.items.get(item), capacity - 1);
-
-        int overflow = tile.block().acceptStack(item, 10, tile, unit);
-        assertEquals(1, overflow);
-
-        tile.block().handleStack(item, 1, tile, unit);
-        assertEquals(capacity, tile.entity.items.get(item));
+        for(int i = 0; i <= capacity*2; i++){
+            boolean accepts = tile.block().acceptItem(item, tile);
+            if(i >= capacity){
+                assertFalse(accepts, "Block should not accept over capacity");
+            }else{
+                assertTrue(accepts, "Block should accept when under capacity, but does not.");
+                tile.block().handleItem(item, tile);
+                assertEquals(i + 1, tile.entity.items.get(item), "Block should have had the item added, but did not.");
+            }
+        }
     }
 }
