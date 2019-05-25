@@ -14,6 +14,8 @@ import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.meta.*;
 
+import java.io.*;
+
 import static io.anuke.mindustry.Vars.tilesize;
 
 public class Conveyor extends Block{
@@ -107,16 +109,14 @@ public class Conveyor extends Block{
     public void onProximityAdded(Tile tile){
         Tile facing = tile.facing();
         //find block of same type that this is facing, add if necessary and stop
-        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation() &&
-            facing.<ConveyorEntity>entity().line != null){
+        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation()){
             facing.<ConveyorEntity>entity().line.addLast(tile);
             return;
         }
 
-        facing = tile.getNearby((tile.rotation() + 2)%4);
+        facing = tile.behind();
         //find block of same type that this is facing, add if necessary and stop
-        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation() &&
-            facing.<ConveyorEntity>entity().line != null){
+        if(facing != null && facing.block() == this && facing.rotation() == tile.rotation()){
             facing.<ConveyorEntity>entity().line.addFirst(tile);
             return;
         }
@@ -183,6 +183,39 @@ public class Conveyor extends Block{
         float clogHeat = 0f;
 
         ConveyorLine line;
+
+        @Override
+        public TileEntity init(Tile tile, boolean shouldAdd){
+            super.init(tile, shouldAdd);
+            //this is a bit of a hack; sets the entity before the line can init
+            tile.entity = this;
+            line = new ConveyorLine(tile);
+            return this;
+        }
+
+        @Override
+        public byte version(){
+            return 1;
+        }
+
+        @Override
+        public void read(DataInput stream, byte revision) throws IOException{
+            super.read(stream, revision);
+            if(revision == 0){
+                int amount = stream.readInt();
+                for(int i = 0; i < amount; i++){
+                    //information is currently discarded for old versions
+                    stream.readInt();
+                }
+            }else{
+
+            }
+        }
+
+        @Override
+        public void write(DataOutput stream) throws IOException{
+            super.write(stream);
+        }
     }
 
 }
