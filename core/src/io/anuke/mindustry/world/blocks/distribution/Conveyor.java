@@ -120,9 +120,6 @@ public class Conveyor extends Block{
             facing.<ConveyorEntity>entity().line.addFirst(tile);
             return;
         }
-
-        //no line found, make a new one
-        tile.<ConveyorEntity>entity().line = new ConveyorLine(tile);
     }
 
     @Override
@@ -169,7 +166,7 @@ public class Conveyor extends Block{
     @Override
     public void handleItem(Item item, Tile tile, Tile source){
         ConveyorEntity entity = tile.entity();
-        entity.line.handleItem(tile, item, 0);
+        entity.line.handleItem(tile, source, item, 0);
     }
 
     @Override

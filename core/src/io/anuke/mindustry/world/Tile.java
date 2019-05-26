@@ -315,6 +315,10 @@ public class Tile implements Position, TargetTrait{
         return null;
     }
 
+    public Tile relativeNear(int rotation){
+        return getNearby(Mathf.mod(this.rotation + rotation, 4));
+    }
+
     public boolean interactable(Team team){
         return getTeam() == Team.none || team == getTeam();
     }

@@ -58,11 +58,16 @@ public class ConveyorLine{
         return maxOffset <= rawDst - itemSpacing;
     }
 
-    public void handleItem(Tile tile, Item item, int offset){
+    public void handleItem(Tile tile, Tile from, Item item, int offset){
         //distance in conveyor units from end
         int rawDst = (1 + Math.max(Math.abs(tile.x - end.x), Math.abs(tile.y - end.y))) * unitMult + offset;
         int total = 0;
         int lastTotal = 0;
+        int src = //src direction based on input
+            tile.behind() == from ? 0 :
+            tile.relativeNear(-1) == from ? 1 :
+            tile.relativeNear(1) == from ? 2 : 0;
+
         maxOffset = Math.max(rawDst, maxOffset);
         for(int i = items.size - 1; i >= 0; i--){
             int curr = items.get(i);
@@ -70,7 +75,7 @@ public class ConveyorLine{
             if(rawDst < total){ //found place to insert
 
                 int inserti = i + 1;
-                int result = ItemPos.get((byte)item.id, rawDst - lastTotal);
+                int result = ItemPos.get((byte)item.id, rawDst - lastTotal, src);
                 if(inserti == items.size){
                     items.add(result);
                 }else{
@@ -79,14 +84,14 @@ public class ConveyorLine{
 
                 int finalDst = ItemPos.space(curr) - (rawDst - lastTotal);
                 //update previous item's distance
-                items.set(i, ItemPos.get(ItemPos.item(curr), finalDst));
+                items.set(i, ItemPos.space(curr, finalDst));
                 return;
             }
 
             lastTotal = total;
         }
 
-        int toInsert = ItemPos.get((byte)item.id, rawDst - total);
+        int toInsert = ItemPos.get((byte)item.id, rawDst - total, src);
         if(items.size == 0){
             items.add(toInsert);
         }else{
@@ -109,16 +114,19 @@ public class ConveyorLine{
 
         for(int i = items.size - 1; i >= 0; i --){
             int item = items.get(i);
+            int src = ItemPos.src(item);
             offset += ItemPos.space(item);
+
             TextureRegion region = content.item(ItemPos.item(item)).icon(Icon.conveyor);
             float posOffset = offset / (float)unitMult * tilesize;
             float x = startX + dx*posOffset, y = startY + dy*posOffset;
-            Tile on = get(Mathf.clamp(length - 1 - offset / unitMult, 0, length - 1));
-            ConveyorEntity ent = on.entity();
-            if(ent.blendbits == 1){
-                int rot = ent.blendscly == -1 && on.rotation() % 2 == 1 ? (on.rotation() + 2) % 4 : on.rotation();
+
+            if(src != 0){
+                Tile on = get(Mathf.clamp(length - 1 - offset / unitMult, 0, length - 1));
+
+                int rot = src == 1 && on.rotation() % 2 == 1 ? (on.rotation() + 2) % 4 : on.rotation();
                 Point2 p = edges[rot];
-                int ex = p.x * ent.blendsclx, ey = p.y * ent.blendscly;
+                int ex = p.x, ey = p.y * (src == 1 ? -1 : 0);
                 float degrees = rot % 2 == 0 ? (1f-(((offset-1)/(float)unitMult)%1f))*90f : ((((offset-1)/(float)unitMult)%1f))*90f;
                 x = on.worldx() + ex*tilesize/2f - ex*Angles.trnsx(degrees, tilesize/2f);
                 y = on.worldy() + ey*tilesize/2f - ey*Angles.trnsy(degrees, tilesize/2f);
@@ -130,6 +138,7 @@ public class ConveyorLine{
 
     /** adds a tile to the tail of this line.*/
     public void addLast(Tile tile){
+        tile.<ConveyorEntity>entity().line.seed.entity.remove();
         tile.<ConveyorEntity>entity().line = this;
         start = tile;
 
@@ -142,6 +151,7 @@ public class ConveyorLine{
 
     /** adds a tile to the head of this line.*/
     public void addFirst(Tile tile){
+        tile.<ConveyorEntity>entity().line.seed.entity.remove();
         tile.<ConveyorEntity>entity().line = this;
         end = tile;
 
@@ -150,7 +160,7 @@ public class ConveyorLine{
         //offset item at head by spacing
         if(items.size > 0){
             int src = items.peek();
-            items.set(items.size - 1, ItemPos.get(ItemPos.item(src), ItemPos.space(src) + unitMult));
+            items.set(items.size - 1, ItemPos.space(src, ItemPos.space(src) + unitMult));
             maxOffset += unitMult;
         }
 
@@ -189,7 +199,7 @@ public class ConveyorLine{
             if(endidx != -1){
                 int prev = items.get(endidx);
                 //offset item at the end by the remainder
-                items.set(endidx, ItemPos.get(ItemPos.item(prev), ItemPos.space(prev) - (unitMult - sum)));
+                items.set(endidx, ItemPos.space(prev, ItemPos.space(prev) - (unitMult - sum)));
 
                 index = 0;
                 //only remove if there's actually something to remove; if the first item is out of bounds, ignore it
@@ -293,12 +303,12 @@ public class ConveyorLine{
                         nextOffset += ItemPos.space(items.get(i));
                     }
                     //properly offset the head item on this belt
-                    items.set(tweaki, ItemPos.get(ItemPos.item(it), ItemPos.space(it) - (removeLength - nextOffset)));
+                    items.set(tweaki, ItemPos.space(it, ItemPos.space(it) - (removeLength - nextOffset)));
                 }
                 items.removeRange(removeTo, items.size - 1);
             }else if(!items.isEmpty()){ //nothing to remove from this line, but there may be items on this line to be tweaked
                 int head = items.peek();
-                items.set(items.size - 1, ItemPos.get(ItemPos.item(head), ItemPos.space(head) - removeLen));
+                items.set(items.size - 1, ItemPos.space(head, ItemPos.space(head) - removeLen));
                 //max offset moves back too
                 maxOffset -= removeLen;
             }
@@ -330,7 +340,7 @@ public class ConveyorLine{
         //merge last item properly
         if(toChange >= 0){
             int src = items.get(toChange);
-            items.set(toChange, ItemPos.get(ItemPos.item(src), ItemPos.space(src) + (unitMult*other.length() - total)));
+            items.set(toChange, ItemPos.space(src, ItemPos.space(src) + (unitMult*other.length() - total)));
         }
     }
 
@@ -354,7 +364,7 @@ public class ConveyorLine{
                 index = 0; //reset to index 0, as items there can move now
             }else if(index == 0){
                 //if passing doesn't work, reset the head index to 0 to prevent massive negative overflows
-                items.set(items.size - 1, ItemPos.get((byte)citem.id, 0));
+                items.set(items.size - 1, ItemPos.space(hitem, 0));
                 //otherwise, go to the next item to move it forward since this one is stuck
                 index++;
             }
@@ -379,7 +389,7 @@ public class ConveyorLine{
             //else, move item forward
             int moved = Math.max(1, (int)(Time.delta() * speed));
             int newOffset = Math.max(offset - moved, index == 0 ? 0 : itemSpacing);
-            items.set(arridx, ItemPos.get(item, newOffset));
+            items.set(arridx, ItemPos.get(item, newOffset, (byte)0));
 
             //move max offset back every frame
             maxOffset -= (offset - newOffset);
@@ -395,7 +405,7 @@ public class ConveyorLine{
         if(next.block() instanceof Conveyor){
             if(next.block().acceptItem(citem, next, end)){
                 ConveyorLine line = next.<ConveyorEntity>entity().line;
-                line.handleItem(next, citem, ItemPos.space(itemp));
+                line.handleItem(next, end, citem, ItemPos.space(itemp));
                 return true;
             }
             return false;
@@ -446,7 +456,11 @@ public class ConveyorLine{
         /**item ID*/
         byte item;
         /**item position in conveyor line relative to the last item*/
-        @StructField(24)
+        @StructField(22)
         int space;
+        /**source direction: 0 (straight, nothing interesting), 1 (came from left), or 2 (from right).
+         * 3 is also technically possible but let's not think about that*/
+        @StructField(2)
+        int src;
     }
 }

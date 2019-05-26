@@ -129,7 +129,7 @@ public class StructAnnotationProcessor extends AbstractProcessor{
                             cons.append(" | (((").append(structType).append(")").append(varName).append(" << ").append(offset).append("L)").append(" & ").append(bitString(offset, size, structTotalSize)).append(")");
 
                             //bytes, shorts, chars, ints
-                            setter.addStatement("return ($T)(($L & $L) | (($T)value << $LL))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
+                            setter.addStatement("return ($T)(($L & ~$L) | ((($T)value << $LL)))", structType, structParam, bitString(offset, size, structTotalSize), structType, offset);
                         }
 
                         doc.append("<br>  ").append(varName).append(" [").append(offset).append("..").append(size + offset).append("]\n");

@@ -1,6 +1,7 @@
 import io.anuke.arc.ApplicationCore;
 import io.anuke.arc.backends.headless.HeadlessApplication;
 import io.anuke.arc.collection.Array;
+import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Point2;
 import io.anuke.arc.util.Log;
 import io.anuke.arc.util.Time;
@@ -11,6 +12,7 @@ import io.anuke.mindustry.core.*;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
 import io.anuke.mindustry.entities.type.base.Spirit;
 import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.ItemPos;
 import io.anuke.mindustry.io.BundleLoader;
 import io.anuke.mindustry.io.SaveIO;
 import io.anuke.mindustry.maps.Map;
@@ -353,6 +355,36 @@ public class ApplicationTests{
                 }
             }
         }
+    }
+
+    @Test
+    void itemPosGeneric(){
+        for(int i = 0; i < 1000; i++){
+            byte item = (byte)(i%100);
+            int pos = i * 1000;
+            int result = ItemPos.get(item, pos, (byte)0);
+            int rnd = Mathf.random(1000 * 1000);
+
+            assertEquals(pos, ItemPos.space(result), "ItemPos space is not constructed properly at test #" + (i));
+            assertEquals(item, ItemPos.item(result), "ItemPos item is constructed porperly.");
+
+            int tweaked = ItemPos.space(result, rnd);
+            assertEquals(rnd, ItemPos.space(tweaked), "ItemPos space is not set properly at test #" + (i));
+            assertEquals(item, ItemPos.item(tweaked), "ItemPos item is not preserved when setting space.");
+        }
+    }
+
+    @Test
+    void itemPosOverflow(){
+        //22 bits, update when needed
+        int maxLength = 1 << 22;
+        byte z = 0;
+
+        assertEquals(0, ItemPos.space(ItemPos.get(z, maxLength, z)), "ItemPos overflow doesn't wrap to 0. Expected max is " + maxLength);
+        assertEquals(1, ItemPos.space(ItemPos.get(z, maxLength + 1, z)), "ItemPos overflow doesn't wrap to 1. Expected max is " + maxLength);
+
+        assertEquals(maxLength - 1, ItemPos.space(ItemPos.get(z, -1, z)), "ItemPos underflow doesn't wrap.");
+        assertEquals(maxLength - 2, ItemPos.space(ItemPos.get(z, -2, z)), "ItemPos underflow doesn't wrap.");
     }
 
     void initBuilding(){
