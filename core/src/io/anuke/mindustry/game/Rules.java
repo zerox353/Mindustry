@@ -1,17 +1,14 @@
 package io.anuke.mindustry.game;
 
-import io.anuke.annotations.Annotations.Serialize;
-import io.anuke.arc.collection.Array;
-import io.anuke.mindustry.content.Items;
-import io.anuke.mindustry.io.JsonIO;
-import io.anuke.mindustry.type.ItemStack;
-import io.anuke.mindustry.type.Zone;
+import io.anuke.arc.collection.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.type.*;
 
 /**
  * Defines current rules on how the game should function.
  * Does not store game state, just configuration.
  */
-@Serialize
 public class Rules{
     /** Whether the player has infinite resources. */
     public boolean infiniteResources;

@@ -1,15 +1,12 @@
 package io.anuke.mindustry.game;
 
-import io.anuke.annotations.Annotations.Serialize;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.ObjectIntMap;
-import io.anuke.arc.math.Mathf;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.math.*;
 import io.anuke.mindustry.type.*;
 
-@Serialize
 public class Stats{
     /** Items delivered to global resoure counter. Zones only. */
-    public transient ObjectIntMap<Item> itemsDelivered = new ObjectIntMap<>();
+    public ObjectIntMap<Item> itemsDelivered = new ObjectIntMap<>();
     /** Enemy (red team) units destroyed. */
     public int enemyUnitsDestroyed;
     /** Total waves lasted. */

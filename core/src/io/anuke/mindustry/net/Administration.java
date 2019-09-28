@@ -1,6 +1,5 @@
 package io.anuke.mindustry.net;
 
-import io.anuke.annotations.Annotations.*;
 import io.anuke.arc.*;
 import io.anuke.arc.collection.*;
 
@@ -309,7 +308,6 @@ public class Administration{
         whitelist = Core.settings.getObject("whitelisted", Array.class, Array::new);
     }
 
-    @Serialize
     public static class PlayerInfo{
         public String id;
         public String lastName = "<unknown>", lastIP = "<unknown>";

@@ -1,6 +1,5 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.annotations.Annotations.*;
 import io.anuke.arc.*;
 import io.anuke.arc.collection.*;
 import io.anuke.arc.graphics.*;
@@ -358,7 +357,6 @@ public class JoinDialog extends FloatingDialog{
         Core.settings.save();
     }
 
-    @Serialize
     public static class Server{
         public String ip;
         public int port;

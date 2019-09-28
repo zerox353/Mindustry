@@ -36,13 +36,6 @@ public class Annotations{
 
     }
 
-    /** Marks a class as serializable. */
-    @Target(ElementType.TYPE)
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface Serialize{
-
-    }
-
     /** Marks a class as a special value type struct. Class name must end in 'Struct'. */
     @Target(ElementType.TYPE)
     @Retention(RetentionPolicy.SOURCE)

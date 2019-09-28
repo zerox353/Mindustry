@@ -15,7 +15,6 @@ import io.anuke.mindustry.entities.effect.*;
 import io.anuke.mindustry.entities.traits.*;
 import io.anuke.mindustry.entities.type.*;
 import io.anuke.mindustry.game.*;
-import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.input.*;
 import io.anuke.mindustry.maps.*;
 import io.anuke.mindustry.net.Net;
@@ -173,7 +172,6 @@ public class Vars implements Loadable{
     }
 
     public static void init(){
-        Serialization.init();
 
         if(loadLocales){
             //load locales
