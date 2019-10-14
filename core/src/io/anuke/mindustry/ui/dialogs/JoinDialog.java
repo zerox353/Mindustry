@@ -29,6 +29,16 @@ public class JoinDialog extends FloatingDialog{
     public JoinDialog(){
         super("$joingame");
 
+        Core.settings.setSerializer(Server.class, (out, server) -> {
+            out.writeUTF(server.ip);
+            out.writeInt(server.port);
+        }, in -> {
+            Server s = new Server();
+            s.ip = in.readUTF();
+            s.port = in.readInt();
+            return s;
+        });
+
         loadServers();
 
         buttons.add().width(60f);
