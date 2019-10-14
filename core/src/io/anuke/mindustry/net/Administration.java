@@ -300,7 +300,7 @@ public class Administration{
     public void save(){
         Core.settings.putObject("player-data", playerInfo);
         Core.settings.putObject("ipbans", bannedIPs);
-        Core.settings.putObject("whitelist", whitelist);
+        Core.settings.putObject("whitelisted-ids", whitelist);
         Core.settings.save();
     }
 
@@ -309,7 +309,7 @@ public class Administration{
         if(!loadLegacy()){
             playerInfo = Core.settings.getObject("player-data", ObjectMap.class, ObjectMap::new);
             bannedIPs = Core.settings.getObject("ipbans", Array.class, Array::new);
-            whitelist = Core.settings.getObject("whitelist", Array.class, Array::new);
+            whitelist = Core.settings.getObject("whitelisted-ids", Array.class, Array::new);
         }else{
             save();
             Log.info("Loaded legacy server data.");
