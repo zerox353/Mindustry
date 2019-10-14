@@ -1,6 +1,5 @@
 package io.anuke.mindustry.editor;
 
-import io.anuke.annotations.Annotations.*;
 import io.anuke.arc.*;
 import io.anuke.arc.collection.*;
 import io.anuke.arc.files.*;
@@ -16,6 +15,7 @@ import io.anuke.arc.scene.style.*;
 import io.anuke.arc.scene.ui.*;
 import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
+import io.anuke.arc.util.ArcAnnotate.*;
 import io.anuke.mindustry.*;
 import io.anuke.mindustry.content.*;
 import io.anuke.mindustry.core.GameState.*;
@@ -24,7 +24,7 @@ import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.graphics.*;
 import io.anuke.mindustry.io.*;
 import io.anuke.mindustry.maps.*;
-import io.anuke.mindustry.ui.Styles;
+import io.anuke.mindustry.ui.*;
 import io.anuke.mindustry.ui.dialogs.*;
 import io.anuke.mindustry.world.*;
 import io.anuke.mindustry.world.blocks.*;
@@ -150,7 +150,7 @@ public class MapEditorDialog extends Dialog implements Disposable{
             menu.cont.addImageTextButton("$editor.publish.workshop", Icon.linkSmall, () -> {
                 Map builtin = maps.all().find(m -> m.name().equals(editor.getTags().get("name", "").trim()));
                 if(editor.getTags().containsKey("steamid") && builtin != null && !builtin.custom){
-                    platform.viewMapListing(editor.getTags().get("steamid"));
+                    platform.viewListing(editor.getTags().get("steamid"));
                     return;
                 }
 
@@ -213,14 +213,6 @@ public class MapEditorDialog extends Dialog implements Disposable{
         update(() -> {
             if(Core.scene.getKeyboardFocus() instanceof Dialog && Core.scene.getKeyboardFocus() != this){
                 return;
-            }
-
-            Vector2 v = pane.stageToLocalCoordinates(Core.input.mouse());
-
-            if(v.x >= 0 && v.y >= 0 && v.x <= pane.getWidth() && v.y <= pane.getHeight()){
-                Core.scene.setScrollFocus(pane);
-            }else{
-                Core.scene.setScrollFocus(null);
             }
 
             if(Core.scene != null && Core.scene.getKeyboardFocus() == this){
@@ -688,6 +680,11 @@ public class MapEditorDialog extends Dialog implements Disposable{
         pane = new ScrollPane(content);
         pane.setFadeScrollBars(false);
         pane.setOverscroll(true, false);
+        pane.exited(() -> {
+            if(pane.hasScroll()){
+                Core.scene.setScrollFocus(view);
+            }
+        });
         ButtonGroup<ImageButton> group = new ButtonGroup<>();
 
         int i = 0;
@@ -705,7 +702,7 @@ public class MapEditorDialog extends Dialog implements Disposable{
         });
 
         for(Block block : blocksOut){
-            TextureRegion region = block.icon(Block.Icon.medium);
+            TextureRegion region = block.icon(Cicon.medium);
 
             if(!Core.atlas.isFound(region)) continue;
 

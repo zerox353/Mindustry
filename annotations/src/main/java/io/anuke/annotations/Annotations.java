@@ -22,20 +22,6 @@ public class Annotations{
     public @interface OverrideCallSuper {
     }
 
-    /** Indicates that a method return or field can be null.*/
-    @Target({ElementType.METHOD, ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface Nullable{
-
-    }
-
-    /** Indicates that a method return or field cannot be null.*/
-    @Target({ElementType.METHOD, ElementType.FIELD, ElementType.PARAMETER, ElementType.LOCAL_VARIABLE})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface NonNull{
-
-    }
-
     /** Marks a class as a special value type struct. Class name must end in 'Struct'. */
     @Target(ElementType.TYPE)
     @Retention(RetentionPolicy.SOURCE)

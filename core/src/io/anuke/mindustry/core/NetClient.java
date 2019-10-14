@@ -76,6 +76,7 @@ public class NetClient implements ApplicationListener{
 
             ConnectPacket c = new ConnectPacket();
             c.name = player.name;
+            c.mods = mods.getModStrings();
             c.mobile = mobile;
             c.versionType = Version.type;
             c.color = Color.rgba8888(player.color);
@@ -235,7 +236,7 @@ public class NetClient implements ApplicationListener{
         netClient.disconnectQuietly();
         state.set(State.menu);
         logic.reset();
-        ui.showText("$disconnect", reason);
+        ui.showText("$disconnect", reason, Align.left);
         ui.loadfrag.hide();
     }
 
