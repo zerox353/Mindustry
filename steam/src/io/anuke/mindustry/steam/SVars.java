@@ -1,4 +1,4 @@
-package io.anuke.mindustry.desktop.steam;
+package io.anuke.mindustry.steam;
 
 public class SVars{
     public final static int steamID = 1127400;

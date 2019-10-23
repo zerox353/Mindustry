@@ -1,9 +1,14 @@
 package io.anuke.mindustry.server;
 
 import com.codedisaster.steamworks.*;
+import io.anuke.arc.*;
+import io.anuke.arc.backends.headless.*;
 import io.anuke.arc.util.*;
 import io.anuke.mindustry.*;
 import io.anuke.mindustry.core.Version;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.net.*;
+import io.anuke.mindustry.steam.*;
 
 public class SteamControl{
 
@@ -11,13 +16,19 @@ public class SteamControl{
 
         if(Version.modifier != null && Version.modifier.contains("steam")){
             try{
+                HeadlessFiles files = new HeadlessFiles();
+                //create appid file, since that is required
+                if(!files.local("steam_appid.txt").exists()){
+                    files.local("steam_appid.txt").writeString("1127400");
+                }
+
                 SteamAPI.loadLibraries();
 
                 if(!SteamAPI.init()){
                     Log.err("Steam client failed to initialize! Exiting.");
                     return false;
                 }else{
-                    Log.info("Connected to Steam API.");
+                    Log.info("&lc[Connected to Steam API.]");
                     Vars.steam = true;
                     setProviders();
                     return true;
@@ -32,6 +43,23 @@ public class SteamControl{
     }
 
     private void setProviders(){
+        SVars.net = new SNet(new ArcNetImpl());
+        Events.on(ServerLoadEvent.class, e -> {
+            Core.app.addListener(new ApplicationListener(){
+                @Override
+                public void update(){
+                    if(SteamAPI.isSteamRunning()){
+                        SteamAPI.runCallbacks();
+                    }
+                }
 
+                @Override
+                public void dispose(){
+                    if(Vars.steam && SteamAPI.isSteamRunning()){
+                        SteamAPI.shutdown();
+                    }
+                }
+            });
+        });
     }
 }

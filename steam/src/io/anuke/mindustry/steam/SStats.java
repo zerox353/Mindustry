@@ -1,4 +1,4 @@
-package io.anuke.mindustry.desktop.steam;
+package io.anuke.mindustry.steam;
 
 import com.codedisaster.steamworks.*;
 import io.anuke.arc.*;
@@ -14,7 +14,7 @@ import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.world.*;
 
 import static io.anuke.mindustry.Vars.*;
-import static io.anuke.mindustry.desktop.steam.SAchievement.*;
+import static io.anuke.mindustry.steam.SAchievement.*;
 
 @SuppressWarnings("unchecked")
 public class SStats implements SteamUserStatsCallback{

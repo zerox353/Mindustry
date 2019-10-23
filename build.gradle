@@ -143,13 +143,12 @@ project(":desktop"){
 
     dependencies{
         compile project(":core")
+        compile project(":steam")
 
         if(debugged()) compile project(":debug")
 
         compile "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
         compile "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
-
-        compile "com.code-disaster.steamworks4j:steamworks4j:$steamworksVersion"
 
         compile arcModule("backends:backend-sdl")
         compile 'com.github.MinnDevelopment:java-discord-rpc:v2.0.1'
@@ -244,9 +243,8 @@ project(":server"){
 
     dependencies{
         compile project(":core")
+        compile project(":steam")
         compile arcModule("backends:backend-headless")
-
-        compile "com.code-disaster.steamworks4j:steamworks4j-server:$steamworksVersion"
     }
 }
 
@@ -277,6 +275,17 @@ project(":tools"){
         compile "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
 
         compile arcModule("backends:backend-sdl")
+    }
+}
+
+project(":steam"){
+    apply plugin: "java"
+
+    dependencies{
+        compile project(":core")
+
+        compile "com.code-disaster.steamworks4j:steamworks4j:$steamworksVersion"
+        compile "com.code-disaster.steamworks4j:steamworks4j-server:$steamworksVersion"
     }
 }
 

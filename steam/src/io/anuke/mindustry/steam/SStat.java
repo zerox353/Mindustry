@@ -1,4 +1,4 @@
-package io.anuke.mindustry.desktop.steam;
+package io.anuke.mindustry.steam;
 
 public enum SStat{
     unitsDestroyed,

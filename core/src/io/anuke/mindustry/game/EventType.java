@@ -81,8 +81,12 @@ public class EventType{
         }
     }
 
-    /** Called when the client game is first loaded. */
+    /** Called when the client game is first loaded. Not fired on server.*/
     public static class ClientLoadEvent{
+
+    }
+
+    public static class ServerLoadEvent{
 
     }
 
