@@ -19,6 +19,7 @@ public class SteamControl{
                 }else{
                     Log.info("Connected to Steam API.");
                     Vars.steam = true;
+                    setProviders();
                     return true;
                 }
             }catch(Throwable e){
@@ -28,5 +29,9 @@ public class SteamControl{
             return false;
         }
         return true;
+    }
+
+    private void setProviders(){
+
     }
 }
