@@ -39,6 +39,7 @@ public class ServerControl implements ApplicationListener{
     private static final int maxLogLength = 1024 * 512;
     private static final int commandSocketPort = 6859;
 
+    private final SteamControl scontrol = new SteamControl();
     private final CommandHandler handler = new CommandHandler("");
     private final FileHandle logFolder = Core.settings.getDataDirectory().child("logs/");
 
@@ -51,6 +52,11 @@ public class ServerControl implements ApplicationListener{
     private PrintWriter socketOutput;
 
     public ServerControl(String[] args){
+        //skip initializing when steam control says there's an error
+        if(!scontrol.init()){
+            System.exit(1);
+        }
+
         Core.settings.defaults(
             "shufflemode", "normal",
             "bans", "",

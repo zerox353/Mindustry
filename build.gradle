@@ -150,7 +150,6 @@ project(":desktop"){
         compile "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
 
         compile "com.code-disaster.steamworks4j:steamworks4j:$steamworksVersion"
-        compile "com.code-disaster.steamworks4j:steamworks4j-server:$steamworksVersion"
 
         compile arcModule("backends:backend-sdl")
         compile 'com.github.MinnDevelopment:java-discord-rpc:v2.0.1'
@@ -246,6 +245,8 @@ project(":server"){
     dependencies{
         compile project(":core")
         compile arcModule("backends:backend-headless")
+
+        compile "com.code-disaster.steamworks4j:steamworks4j-server:$steamworksVersion"
     }
 }
 
