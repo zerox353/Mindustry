@@ -12,6 +12,8 @@ logs/
 /desktop/gifexport/
 /core/lib/
 /ios/assets/
+/steam/build/
+/steam/out/
 /core/assets-raw/sprites/generated/
 /core/assets-raw/sprites_out/
 /annotations/build/
