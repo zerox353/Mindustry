@@ -1,17 +1,18 @@
 package io.anuke.mindustry.server;
 
 import com.codedisaster.steamworks.*;
+import com.codedisaster.steamworks.SteamGameServerAPI.*;
 import io.anuke.arc.*;
 import io.anuke.arc.backends.headless.*;
 import io.anuke.arc.util.*;
 import io.anuke.mindustry.*;
 import io.anuke.mindustry.core.Version;
 import io.anuke.mindustry.game.EventType.*;
-import io.anuke.mindustry.steam.*;
 
 public class SteamControl{
 
     public boolean init(){
+
 
         if(Version.modifier != null && Version.modifier.contains("steam")){
             try{
@@ -21,9 +22,9 @@ public class SteamControl{
                     files.local("steam_appid.txt").writeString("1127400");
                 }
 
-                SteamAPI.loadLibraries();
+                SteamGameServerAPI.loadLibraries();
 
-                if(!SteamAPI.init()){
+                if(!SteamGameServerAPI.init(0x7f000001, (short)6567, (short)6567, (short)6567, ServerMode.AuthenticationAndSecure, Version.build + "")){
                     Log.err("Steam client failed to initialize! Exiting.");
                     return false;
                 }else{
@@ -42,20 +43,19 @@ public class SteamControl{
     }
 
     private void setProviders(){
-        SVars.net = new SNet(null);
         Events.on(ServerLoadEvent.class, e -> {
             Core.app.addListener(new ApplicationListener(){
                 @Override
                 public void update(){
-                    if(SteamAPI.isSteamRunning()){
-                        SteamAPI.runCallbacks();
+                    if(Vars.steam){
+                        SteamGameServerAPI.runCallbacks();
                     }
                 }
 
                 @Override
                 public void dispose(){
-                    if(Vars.steam && SteamAPI.isSteamRunning()){
-                        SteamAPI.shutdown();
+                    if(Vars.steam){
+                        SteamGameServerAPI.shutdown();
                     }
                 }
             });

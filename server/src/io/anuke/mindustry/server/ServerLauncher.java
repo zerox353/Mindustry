@@ -8,7 +8,6 @@ import io.anuke.mindustry.game.EventType.*;
 import io.anuke.mindustry.mod.*;
 import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.net.*;
-import io.anuke.mindustry.steam.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -26,7 +25,7 @@ public class ServerLauncher implements ApplicationListener{
                 System.exit(1);
             }
 
-            Vars.net = new Net(Vars.steam ? SVars.net : Vars.platform.getNet());
+            Vars.net = new Net(Vars.platform.getNet());
             new HeadlessApplication(new ServerLauncher(), null, throwable -> CrashSender.send(throwable, f -> {}));
         }catch(Throwable t){
             CrashSender.send(t, f -> {});
