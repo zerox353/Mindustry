@@ -1,4 +1,4 @@
-package io.anuke.mindustry.server;
+package io.anuke.mindustry.server.steam;
 
 import com.codedisaster.steamworks.*;
 import com.codedisaster.steamworks.SteamGameServerAPI.*;

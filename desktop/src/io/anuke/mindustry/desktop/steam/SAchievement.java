@@ -1,4 +1,4 @@
-package io.anuke.mindustry.steam;
+package io.anuke.mindustry.desktop.steam;
 
 public enum SAchievement{
     completeTutorial,
