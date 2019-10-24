@@ -7,10 +7,11 @@ import com.codedisaster.steamworks.SteamNetworking.*;
 import io.anuke.arc.*;
 import io.anuke.arc.collection.*;
 import io.anuke.arc.function.*;
+import io.anuke.arc.util.ArcAnnotate.*;
 import io.anuke.arc.util.*;
 import io.anuke.arc.util.pooling.*;
-import io.anuke.mindustry.game.EventType.*;
 import io.anuke.mindustry.core.Version;
+import io.anuke.mindustry.game.EventType.*;
 import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.net.ArcNetImpl.*;
 import io.anuke.mindustry.net.*;
@@ -28,7 +29,7 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
     public final SteamMatchmaking smat = new SteamMatchmaking(this);
     public final SteamFriends friends = new SteamFriends(this);
 
-    final NetProvider provider;
+    final @Nullable NetProvider provider;
 
     final PacketSerializer serializer = new PacketSerializer();
     final ByteBuffer writeBuffer = ByteBuffer.allocateDirect(1024 * 4);
@@ -41,7 +42,7 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
     Consumer<Host> lobbyCallback;
     Runnable lobbyDoneCallback, joinCallback;
 
-    public SNet(NetProvider provider){
+    public SNet(@Nullable NetProvider provider){
         this.provider = provider;
 
         Events.on(ClientLoadEvent.class, e -> Core.app.addListener(new ApplicationListener(){
@@ -103,7 +104,7 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
     }
 
     public boolean isSteamClient(){
-        return currentServer != null;
+        return currentServer != null || provider == null;
     }
 
     @Override
@@ -117,8 +118,10 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
             }catch(NumberFormatException e){
                 throw new IOException("Invalid Steam ID: " + lobbyname);
             }
-        }else{
+        }else if(provider != null){
             provider.connectClient(ip, port, success);
+        }else{
+            throw new IOException("Can only connect to Steam IPs.");
         }
     }
 
@@ -172,12 +175,18 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
 
     @Override
     public void pingHost(String address, int port, Consumer<Host> valid, Consumer<Exception> failed){
-        provider.pingHost(address, port, valid, failed);
+        if(provider != null){
+            provider.pingHost(address, port, valid, failed);
+        }else{
+            failed.accept(new Exception("No pingable client."));
+        }
     }
 
     @Override
     public void hostServer(int port) throws IOException{
-        provider.hostServer(port);
+        if(provider != null){
+            provider.hostServer(port);
+        }
         smat.createLobby(Core.settings.getBool("publichost") || headless ? LobbyType.Public : LobbyType.FriendsOnly, 16);
 
         Core.app.post(() -> Core.app.post(() -> Core.app.post(() -> Log.debug("Server: {0}\nClient: {1}\nActive: {2}", net.server(), net.client(), net.active()))));
@@ -191,7 +200,9 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
 
     @Override
     public void closeServer(){
-        provider.closeServer();
+        if(provider != null){
+            provider.closeServer();
+        }
 
         if(currentLobby != null){
             smat.leaveLobby(currentLobby);
@@ -206,6 +217,9 @@ public class SNet implements SteamNetworkingCallback, SteamMatchmakingCallback, 
 
     @Override
     public Iterable<? extends NetConnection> getConnections(){
+        if(provider == null){
+            return connections;
+        }
         //merge provider connections
         CopyOnWriteArrayList<NetConnection> connectionsOut = new CopyOnWriteArrayList<>(connections);
         for(NetConnection c : provider.getConnections()) connectionsOut.add(c);

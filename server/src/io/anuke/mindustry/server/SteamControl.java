@@ -7,7 +7,6 @@ import io.anuke.arc.util.*;
 import io.anuke.mindustry.*;
 import io.anuke.mindustry.core.Version;
 import io.anuke.mindustry.game.EventType.*;
-import io.anuke.mindustry.net.*;
 import io.anuke.mindustry.steam.*;
 
 public class SteamControl{
@@ -43,7 +42,7 @@ public class SteamControl{
     }
 
     private void setProviders(){
-        SVars.net = new SNet(new ArcNetImpl());
+        SVars.net = new SNet(null);
         Events.on(ServerLoadEvent.class, e -> {
             Core.app.addListener(new ApplicationListener(){
                 @Override
