@@ -13,7 +13,6 @@ public class SteamControl{
 
     public boolean init(){
 
-
         if(Version.modifier != null && Version.modifier.contains("steam")){
             try{
                 HeadlessFiles files = new HeadlessFiles();
@@ -24,7 +23,7 @@ public class SteamControl{
 
                 SteamGameServerAPI.loadLibraries();
 
-                if(!SteamGameServerAPI.init(0x7f000001, (short)6567, (short)6567, (short)6567, ServerMode.AuthenticationAndSecure, Version.build + "")){
+                if(!SteamGameServerAPI.init(0x7f000001, (short)6568, (short)6567, (short)6569, ServerMode.AuthenticationAndSecure, Version.build + "")){
                     Log.err("Steam client failed to initialize! Exiting.");
                     return false;
                 }else{
