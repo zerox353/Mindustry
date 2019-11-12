@@ -33,7 +33,7 @@ public class MechPad extends Block{
         update = true;
         solid = false;
         hasPower = true;
-        layer = Layer.overlay;
+        layer = Layer.conveyor;
         flags = EnumSet.of(BlockFlag.mechPad);
     }
 

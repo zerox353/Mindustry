@@ -25,7 +25,6 @@ public class Pump extends LiquidBlock{
 
     public Pump(String name){
         super(name);
-        layer = Layer.overlay;
         group = BlockGroup.liquids;
         floating = true;
     }

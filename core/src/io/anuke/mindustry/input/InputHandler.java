@@ -102,7 +102,7 @@ public abstract class InputHandler implements InputProcessor, GestureListener{
         Block block = tile.block();
         ItemStack stack = player.item();
 
-        Core.app.post(() -> Events.fire(new DepositEvent(tile, player, item, accepted)));
+        Core.app.post(() -> Events.fire(new DepositEvent(tile, player, stack.item, stack.amount)));
 
         for(int i = 0; i < stack.amount; i++){
             Time.run(i, () -> {

@@ -1,24 +1,19 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
-import io.anuke.annotations.Annotations.Struct;
-import io.anuke.annotations.Annotations.StructField;
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.IntArray;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Angles;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.math.geom.Point2;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.entities.type.TileEntity;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.func.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.entities.type.*;
 import io.anuke.mindustry.gen.ItemPos;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.type.Item.Icon;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.blocks.distribution.Conveyor.ConveyorEntity;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.distribution.Conveyor.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -117,7 +112,7 @@ public class ConveyorLine{
             int src = ItemPos.src(item);
             offset += ItemPos.space(item);
 
-            TextureRegion region = content.item(ItemPos.item(item)).icon(Icon.conveyor);
+            TextureRegion region = content.item(ItemPos.item(item)).icon(Cicon.medium);
             float posOffset = offset / (float)unitMult * tilesize;
             float x = startX + dx*posOffset, y = startY + dy*posOffset;
 
@@ -434,18 +429,18 @@ public class ConveyorLine{
         }
     }
 
-    public void each(Consumer<Tile> cons){
+    public void each(Cons<Tile> cons){
         if(end.x == start.x){ //vertical
             int len = Math.abs(start.y - end.y);
             int sign = Mathf.sign(end.y - start.y);
             for(int i = 0; i <= len; i++){
-                cons.accept(world.tile(start.x, start.y + sign*i));
+                cons.get(world.tile(start.x, start.y + sign*i));
             }
         }else{ //horizontal
             int len = Math.abs(start.x - end.x);
             int sign = Mathf.sign(end.x - start.x);
             for(int i = 0; i <= len; i++){
-                cons.accept(world.tile(start.x + sign*i, start.y));
+                cons.get(world.tile(start.x + sign*i, start.y));
             }
         }
     }
