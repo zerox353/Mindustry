@@ -1,20 +1,19 @@
 package io.anuke.mindustry.io;
 
-import io.anuke.arc.collection.StringMap;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.Pixmap;
-import io.anuke.arc.graphics.Pixmap.Format;
-import io.anuke.arc.util.io.CounterInputStream;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.game.Version;
-import io.anuke.mindustry.maps.Map;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.Pixmap.*;
+import io.anuke.arc.util.io.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.core.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.maps.*;
 import io.anuke.mindustry.world.*;
-import io.anuke.mindustry.world.blocks.storage.CoreBlock;
+import io.anuke.mindustry.world.blocks.storage.*;
 
 import java.io.*;
-import java.util.zip.InflaterInputStream;
+import java.util.zip.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -64,9 +63,8 @@ public class MapIO{
     }
 
     public static Pixmap generatePreview(Map map) throws IOException{
-        //by default, it does not have an enemy core or any other cores
-        map.tags.put("enemycore", "false");
-        map.tags.put("othercore", "false");
+        map.spawns = 0;
+        map.teams.clear();
 
         try(InputStream is = new InflaterInputStream(map.file.read(bufferSize)); CounterInputStream counter = new CounterInputStream(is); DataInputStream stream = new DataInputStream(counter)){
             SaveIO.readHeader(stream);
@@ -76,7 +74,7 @@ public class MapIO{
 
             Pixmap floors = new Pixmap(map.width, map.height, Format.RGBA8888);
             Pixmap walls = new Pixmap(map.width, map.height, Format.RGBA8888);
-            int black = Color.rgba8888(Color.BLACK);
+            int black = Color.rgba8888(Color.black);
             int shade = Color.rgba8888(0f, 0f, 0f, 0.5f);
             CachedTile tile = new CachedTile(){
                 @Override
@@ -84,8 +82,8 @@ public class MapIO{
                     super.setBlock(type);
                     int c = colorFor(Blocks.air, block(), Blocks.air, getTeam());
                     if(c != black){
-                        walls.drawPixel(x, floors.getHeight() - 1 - y, c);
-                        floors.drawPixel(x, floors.getHeight() - 1 - y + 1, shade);
+                        walls.draw(x, floors.getHeight() - 1 - y, c);
+                        floors.draw(x, floors.getHeight() - 1 - y + 1, shade);
                     }
                 }
 
@@ -93,15 +91,7 @@ public class MapIO{
                 public void setTeam(Team team){
                     super.setTeam(team);
                     if(block instanceof CoreBlock){
-                        if(team != defaultTeam){
-                            //map must have other team's cores
-                            map.tags.put("othercore", "true");
-                        }
-
-                        if(team == waveTeam){
-                            //map must have default enemy team's core
-                            map.tags.put("enemycore", "true");
-                        }
+                        map.teams.add(team.ordinal());
                     }
                 }
             };
@@ -123,9 +113,12 @@ public class MapIO{
                 @Override
                 public Tile create(int x, int y, int floorID, int overlayID, int wallID){
                     if(overlayID != 0){
-                        floors.drawPixel(x, floors.getHeight() - 1 - y, colorFor(Blocks.air, Blocks.air, content.block(overlayID), Team.none));
+                        floors.draw(x, floors.getHeight() - 1 - y, colorFor(Blocks.air, Blocks.air, content.block(overlayID), Team.derelict));
                     }else{
-                        floors.drawPixel(x, floors.getHeight() - 1 - y, colorFor(content.block(floorID), Blocks.air, Blocks.air, Team.none));
+                        floors.draw(x, floors.getHeight() - 1 - y, colorFor(content.block(floorID), Blocks.air, Blocks.air, Team.derelict));
+                    }
+                    if(content.block(overlayID) == Blocks.spawn){
+                        map.spawns ++;
                     }
                     return tile;
                 }
@@ -144,7 +137,7 @@ public class MapIO{
         for(int x = 0; x < pixmap.getWidth(); x++){
             for(int y = 0; y < pixmap.getHeight(); y++){
                 Tile tile = tiles[x][y];
-                pixmap.drawPixel(x, pixmap.getHeight() - 1 - y, colorFor(tile.floor(), tile.block(), tile.overlay(), tile.getTeam()));
+                pixmap.draw(x, pixmap.getHeight() - 1 - y, colorFor(tile.floor(), tile.block(), tile.overlay(), tile.getTeam()));
             }
         }
         return pixmap;

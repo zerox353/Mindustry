@@ -1,21 +1,19 @@
 package io.anuke.mindustry.world.blocks.power;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.Blending;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Mathf;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
 import io.anuke.arc.util.*;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Damage;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.ui.Bar;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
 
@@ -31,8 +29,7 @@ public class ImpactReactor extends PowerGenerator{
     protected int explosionDamage = 2000;
 
     protected Color plasma1 = Color.valueOf("ffd06b"), plasma2 = Color.valueOf("ff361b");
-    protected Color ind1 = Color.valueOf("858585"), ind2 = Color.valueOf("fea080");
-    protected int bottomRegion, topRegion, lightRegion;
+    protected int bottomRegion;
     protected int[] plasmaRegions;
 
     public ImpactReactor(String name){
@@ -44,8 +41,6 @@ public class ImpactReactor extends PowerGenerator{
         outputsPower = consumesPower = true;
 
         bottomRegion = reg("-bottom");
-        topRegion = reg("-top");
-        lightRegion = reg("-light");
         plasmaRegions = new int[plasmas];
         for(int i = 0; i < plasmas; i++){
             plasmaRegions[i] = reg("-plasma-" + i);
@@ -77,12 +72,18 @@ public class ImpactReactor extends PowerGenerator{
         FusionReactorEntity entity = tile.entity();
 
         if(entity.cons.valid() && entity.power.satisfaction >= 0.99f){
+            boolean prevOut = getPowerProduction(tile) <= consumes.getPower().requestedPower(entity);
+
             entity.warmup = Mathf.lerpDelta(entity.warmup, 1f, warmupSpeed);
             if(Mathf.isEqual(entity.warmup, 1f, 0.001f)){
                 entity.warmup = 1f;
             }
 
-            if(entity.timer.get(timerUse, itemDuration)){
+            if(!prevOut && (getPowerProduction(tile) > consumes.getPower().requestedPower(entity))){
+                Events.fire(Trigger.impactPower);
+            }
+
+            if(entity.timer.get(timerUse, itemDuration / entity.timeScale)){
                 entity.cons.trigger();
             }
         }else{
@@ -112,17 +113,12 @@ public class ImpactReactor extends PowerGenerator{
 
         Draw.rect(region, tile.drawx(), tile.drawy());
 
-        Draw.rect(reg(topRegion), tile.drawx(), tile.drawy());
-
-        Draw.color(ind1, ind2, entity.warmup + Mathf.absin(entity.productionEfficiency, 3f, entity.warmup * 0.5f));
-        Draw.rect(reg(lightRegion), tile.drawx(), tile.drawy());
-
         Draw.color();
     }
 
     @Override
     public TextureRegion[] generateIcons(){
-        return new TextureRegion[]{Core.atlas.find(name + "-bottom"), Core.atlas.find(name), Core.atlas.find(name + "-top")};
+        return new TextureRegion[]{Core.atlas.find(name + "-bottom"), Core.atlas.find(name)};
     }
 
     @Override
@@ -137,6 +133,8 @@ public class ImpactReactor extends PowerGenerator{
         FusionReactorEntity entity = tile.entity();
 
         if(entity.warmup < 0.4f) return;
+
+        Sounds.explosionbig.at(tile);
 
         Effects.shake(6f, 16f, tile.worldx(), tile.worldy());
         Effects.effect(Fx.impactShockwave, tile.worldx(), tile.worldy());

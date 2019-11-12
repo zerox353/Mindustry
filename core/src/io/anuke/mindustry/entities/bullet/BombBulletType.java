@@ -1,5 +1,7 @@
 package io.anuke.mindustry.entities.bullet;
 
+import io.anuke.mindustry.gen.*;
+
 public class BombBulletType extends BasicBulletType{
 
     public BombBulletType(float damage, float radius, String sprite){
@@ -13,5 +15,10 @@ public class BombBulletType extends BasicBulletType{
         drag = 0.05f;
         keepVelocity = false;
         collidesAir = false;
+        hitSound = Sounds.explosion;
+    }
+
+    public BombBulletType(){
+        this(1f, 1f, "shell");
     }
 }

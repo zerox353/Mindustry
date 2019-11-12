@@ -1,66 +1,58 @@
 package io.anuke.mindustry.ui.fragments;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.input.KeyCode;
-import io.anuke.arc.math.geom.Vector2;
-import io.anuke.arc.scene.Group;
-import io.anuke.arc.scene.event.Touchable;
-import io.anuke.arc.scene.style.TextureRegionDrawable;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.*;
+import io.anuke.arc.scene.event.*;
+import io.anuke.arc.scene.style.*;
 import io.anuke.arc.scene.ui.*;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.game.EventType.UnlockEvent;
-import io.anuke.mindustry.game.EventType.WorldLoadEvent;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.input.Binding;
-import io.anuke.mindustry.input.InputHandler;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.entities.traits.BuilderTrait.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.input.*;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Block.Icon;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.ui.Cicon;
+import io.anuke.mindustry.world.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class PlacementFragment extends Fragment{
     final int rowWidth = 4;
 
+    public Category currentCategory = Category.distribution;
     Array<Block> returnArray = new Array<>();
     Array<Category> returnCatArray = new Array<>();
-    boolean[] categoryEmpty = new boolean[Category.values().length];
-    Category currentCategory = Category.distribution;
+    boolean[] categoryEmpty = new boolean[Category.all.length];
+    ObjectMap<Category,Block> selectedBlocks = new ObjectMap<Category,Block>();
     Block hovered, lastDisplay;
     Tile lastHover;
     Tile hoverTile;
     Table blockTable, toggler, topTable;
     boolean lastGround;
 
-    //not configurable, no plans to make it configurable
-    final KeyCode[] inputGrid = {
-        KeyCode.NUM_1, KeyCode.NUM_2, KeyCode.NUM_3, KeyCode.NUM_4,
-        KeyCode.Q, KeyCode.W, KeyCode.E, KeyCode.R,
-        KeyCode.A, KeyCode.S, KeyCode.D, KeyCode.F,
-        KeyCode.Z, KeyCode.X, KeyCode.C, KeyCode.V
-    }, inputCatGrid = {
-        KeyCode.NUM_1, KeyCode.NUM_2,
-        KeyCode.Q, KeyCode.W,
-        KeyCode.A, KeyCode.S,
-        KeyCode.Z, KeyCode.X, KeyCode.C, KeyCode.V
-    };
-
     public PlacementFragment(){
         Events.on(WorldLoadEvent.class, event -> {
-            control.input().block = null;
-            rebuild();
+            Core.app.post(() -> {
+                control.input.block = null;
+                rebuild();
+            });
         });
 
         Events.on(UnlockEvent.class, event -> {
             if(event.content instanceof Block){
                 rebuild();
             }
+        });
+
+        Events.on(ResetEvent.class, event -> {
+            selectedBlocks.clear();
         });
     }
 
@@ -75,37 +67,20 @@ public class PlacementFragment extends Fragment{
 
     boolean gridUpdate(InputHandler input){
         if(Core.input.keyDown(Binding.pick)){ //mouse eyedropper select
-            Tile tile = world.tileWorld(Core.input.mouseWorld().x, Core.input.mouseWorld().y);
+            Tile tile = world.ltileWorld(Core.input.mouseWorld().x, Core.input.mouseWorld().y);
+            Block tryRecipe = tile == null ? null : tile.block();
 
-            if(tile != null){
-                tile = tile.link();
-                Block tryRecipe = tile.block();
-                if(tryRecipe.isVisible() && unlocked(tryRecipe)){
-                    input.block = tryRecipe;
-                    currentCategory = input.block.buildCategory;
-                    return true;
+            for(BuildRequest req : player.buildQueue()){
+                if(!req.breaking && req.block.bounds(req.x, req.y, Tmp.r1).contains(Core.input.mouseWorld())){
+                    tryRecipe = req.block;
+                    break;
                 }
             }
-        }
 
-        if(!Core.input.keyDown(Binding.gridMode) || ui.chatfrag.chatOpen()) return false;
-        if(Core.input.keyDown(Binding.gridModeShift)){ //select category
-            int i = 0;
-            for(KeyCode key : inputCatGrid){
-                if(Core.input.keyDown(key)){
-                    input.block = getByCategory(Category.values()[i]).first();
-                    currentCategory = input.block.buildCategory;
-                }
-                i++;
-            }
-            return true;
-        }else{ //select block
-            int i = 0;
-            Array<Block> recipes = getByCategory(currentCategory);
-            for(KeyCode key : inputGrid){
-                if(Core.input.keyDown(key))
-                    input.block = (i < recipes.size && unlocked(recipes.get(i))) ? recipes.get(i) : null;
-                i++;
+            if(tryRecipe != null && tryRecipe.isVisible() && unlocked(tryRecipe)){
+                input.block = tryRecipe;
+                currentCategory = input.block.category;
+                return true;
             }
         }
         return false;
@@ -115,10 +90,9 @@ public class PlacementFragment extends Fragment{
     public void build(Group parent){
         parent.fill(full -> {
             toggler = full;
-            full.bottom().right().visible(() -> !state.is(State.menu) && ui.hudfrag.shown());
+            full.bottom().right().visible(() -> ui.hudfrag.shown());
 
             full.table(frame -> {
-                InputHandler input = control.input();
 
                 //rebuilds the category table with the correct recipes
                 Runnable rebuildCategory = () -> {
@@ -140,19 +114,24 @@ public class PlacementFragment extends Fragment{
                             continue;
                         }
 
-                        ImageButton button = blockTable.addImageButton("icon-locked", "select", 8 * 4, () -> {
+                        ImageButton button = blockTable.addImageButton(Icon.lockedSmall, Styles.selecti, () -> {
                             if(unlocked(block)){
-                                input.block = block;
+                                control.input.block = control.input.block == block ? null : block;
+                                selectedBlocks.put(currentCategory, control.input.block);
                             }
-                        }).size(46f).group(group).get();
+                        }).size(46f).group(group).name("block-" + block.name).get();
 
-                        button.getStyle().imageUp = new TextureRegionDrawable(block.icon(Icon.medium));
+                        button.getStyle().imageUp = new TextureRegionDrawable(block.icon(Cicon.medium));
 
                         button.update(() -> { //color unplacable things gray
                             TileEntity core = player.getClosestCore();
-                            Color color = state.rules.infiniteResources || (core != null && (core.items.has(block.buildRequirements, state.rules.buildCostMultiplier) || state.rules.infiniteResources)) ? Color.WHITE : Color.GRAY;
+                            Color color = state.rules.infiniteResources || (core != null && (core.items.has(block.requirements, state.rules.buildCostMultiplier) || state.rules.infiniteResources)) ? Color.white : Color.gray;
                             button.forEach(elem -> elem.setColor(color));
-                            button.setChecked(input.block == block);
+                            button.setChecked(control.input.block == block);
+
+                            if(state.rules.bannedBlocks.contains(block)){
+                                button.forEach(elem -> elem.setColor(Color.darkGray));
+                            }
                         });
 
                         button.hovered(() -> hovered = block);
@@ -162,11 +141,17 @@ public class PlacementFragment extends Fragment{
                             }
                         });
                     }
+                    //add missing elements to even out table size
+                    if(index < 4){
+                        for(int i = 0; i < 4-index; i++){
+                            blockTable.add().size(46f);
+                        }
+                    }
                     blockTable.act(0f);
                 };
 
                 //top table with hover info
-                frame.table("button-edge-2", top -> {
+                frame.table(Tex.buttonEdge2,top -> {
                     topTable = top;
                     top.add(new Table()).growX().update(topTable -> {
                         //don't refresh unnecessarily
@@ -186,13 +171,15 @@ public class PlacementFragment extends Fragment{
 
                             topTable.table(header -> {
                                 header.left();
-                                header.add(new Image(lastDisplay.icon(Icon.medium))).size(8 * 4);
+                                header.add(new Image(lastDisplay.icon(Cicon.medium))).size(8 * 4);
                                 header.labelWrap(() -> !unlocked(lastDisplay) ? Core.bundle.get("block.unknown") : lastDisplay.localizedName)
                                 .left().width(190f).padLeft(5);
                                 header.add().growX();
                                 if(unlocked(lastDisplay)){
-                                    header.addButton("?", "clear-partial", () -> ui.content.show(lastDisplay))
-                                    .size(8 * 5).padTop(-5).padRight(-5).right().grow();
+                                    header.addButton("?", Styles.clearPartialt, () -> {
+                                        ui.content.show(lastDisplay);
+                                        Events.fire(new BlockInfoEvent());
+                                    }).size(8 * 5).padTop(-5).padRight(-5).right().grow().name("blockinfo");
                                 }
                             }).growX().left();
                             topTable.row();
@@ -200,11 +187,11 @@ public class PlacementFragment extends Fragment{
                             topTable.table(req -> {
                                 req.top().left();
 
-                                for(ItemStack stack : lastDisplay.buildRequirements){
+                                for(ItemStack stack : lastDisplay.requirements){
                                     req.table(line -> {
                                         line.left();
-                                        line.addImage(stack.item.icon(Item.Icon.small)).size(8 * 2);
-                                        line.add(stack.item.localizedName()).color(Color.LIGHT_GRAY).padLeft(2).left();
+                                        line.addImage(stack.item.icon(Cicon.small)).size(8 * 2);
+                                        line.add(stack.item.localizedName).maxWidth(140f).fillX().color(Color.lightGray).padLeft(2).left().get().setEllipsis(true);
                                         line.labelWrap(() -> {
                                             TileEntity core = player.getClosestCore();
                                             if(core == null || state.rules.infiniteResources) return "*/*";
@@ -219,6 +206,15 @@ public class PlacementFragment extends Fragment{
                                     req.row();
                                 }
                             }).growX().left().margin(3);
+
+                            if(state.rules.bannedBlocks.contains(lastDisplay)){
+                                topTable.row();
+                                topTable.table(b -> {
+                                    b.addImage(Icon.cancelSmall).padRight(2).color(Color.scarlet);
+                                    b.add("$banned");
+                                    b.left();
+                                }).padTop(2).left();
+                            }
 
                         }else if(tileDisplayBlock() != null){ //show selected tile
                             lastDisplay = tileDisplayBlock();
@@ -238,21 +234,36 @@ public class PlacementFragment extends Fragment{
                     });
                 }).colspan(3).fillX().visible(() -> getSelected() != null || tileDisplayBlock() != null).touchable(Touchable.enabled);
                 frame.row();
-                frame.addImage("blank").color(Pal.accent).colspan(3).height(3).growX();
+                frame.addImage().color(Pal.gray).colspan(3).height(4).growX();
                 frame.row();
-                frame.table("pane-2", blocksSelect -> {
+                frame.table(Tex.pane2, blocksSelect -> {
                     blocksSelect.margin(4).marginTop(0);
-                    blocksSelect.table(blocks -> blockTable = blocks).grow();
+                    blocksSelect.pane(blocks -> blockTable = blocks).height(194f).update(pane -> {
+                        if(pane.hasScroll()){
+                            Element result = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
+                            if(result == null || !result.isDescendantOf(pane)){
+                                Core.scene.setScrollFocus(null);
+                            }
+                        }
+                    }).grow().get().setStyle(Styles.smallPane);
                     blocksSelect.row();
-                    blocksSelect.table(input::buildUI).growX();
+                    blocksSelect.table(control.input::buildPlacementUI).name("inputTable").growX();
                 }).fillY().bottom().touchable(Touchable.enabled);
                 frame.table(categories -> {
+                    categories.bottom();
+                    categories.add(new Image(Styles.black6){
+                        @Override
+                        public void draw(){
+                            if(height <= Scl.scl(3f)) return;
+                            getDrawable().draw(x, y, width, height - Scl.scl(3f));
+                        }
+                    }).colspan(2).growX().growY().padTop(-3f).row();
                     categories.defaults().size(50f);
 
                     ButtonGroup<ImageButton> group = new ButtonGroup<>();
 
                     //update category empty values
-                    for(Category cat : Category.values()){
+                    for(Category cat : Category.all){
                         Array<Block> blocks = getByCategory(cat);
                         categoryEmpty[cat.ordinal()] = blocks.isEmpty() || !unlocked(blocks.first());
                     }
@@ -262,20 +273,26 @@ public class PlacementFragment extends Fragment{
                         if(f++ % 2 == 0) categories.row();
 
                         if(categoryEmpty[cat.ordinal()]){
-                            categories.addImage("flat");
+                            categories.addImage(Styles.black6);
                             continue;
                         }
 
-                        categories.addImageButton("icon-" + cat.name(), "clear-toggle", 16 * 2, () -> {
+                        categories.addImageButton(Core.atlas.drawable("icon-" + cat.name() + "-smaller"), Styles.clearToggleTransi, () -> {
                             currentCategory = cat;
+                            if(control.input.block != null){
+                                if(selectedBlocks.get(currentCategory) == null){
+                                    selectedBlocks.put(currentCategory, getByCategory(currentCategory).find(this::unlocked));
+                                }
+                                control.input.block = selectedBlocks.get(currentCategory);
+                            }
                             rebuildCategory.run();
-                        }).group(group).update(i -> i.setChecked(currentCategory == cat));
+                        }).group(group).update(i -> i.setChecked(currentCategory == cat)).name("category-" + cat.name());
                     }
-                }).touchable(Touchable.enabled);
+                }).fillY().bottom().touchable(Touchable.enabled);
 
                 rebuildCategory.run();
                 frame.update(() -> {
-                    if(gridUpdate(input)) rebuildCategory.run();
+                    if(gridUpdate(control.input)) rebuildCategory.run();
                 });
             });
         });
@@ -283,7 +300,7 @@ public class PlacementFragment extends Fragment{
 
     Array<Category> getCategories(){
         returnCatArray.clear();
-        returnCatArray.addAll(Category.values());
+        returnCatArray.addAll(Category.all);
         returnCatArray.sort((c1, c2) -> Boolean.compare(categoryEmpty[c1.ordinal()], categoryEmpty[c2.ordinal()]));
         return returnCatArray;
     }
@@ -291,11 +308,15 @@ public class PlacementFragment extends Fragment{
     Array<Block> getByCategory(Category cat){
         returnArray.clear();
         for(Block block : content.blocks()){
-            if(block.buildCategory == cat && block.isVisible()){
+            if(block.category == cat && block.isVisible()){
                 returnArray.add(block);
             }
         }
-        returnArray.sort((b1, b2) -> -Boolean.compare(unlocked(b1), unlocked(b2)));
+        returnArray.sort((b1, b2) -> {
+            int locked = -Boolean.compare(unlocked(b1), unlocked(b2));
+            if(locked != 0) return locked;
+            return Boolean.compare(state.rules.bannedBlocks.contains(b1), state.rules.bannedBlocks.contains(b2));
+        });
         return returnArray;
     }
 
@@ -322,8 +343,8 @@ public class PlacementFragment extends Fragment{
         }
 
         //block currently selected
-        if(control.input().block != null){
-            toDisplay = control.input().block;
+        if(control.input.block != null){
+            toDisplay = control.input.block;
         }
 
         //block hovered on in build menu
@@ -336,6 +357,6 @@ public class PlacementFragment extends Fragment{
 
     /** Returns the block currently being hovered over in the world. */
     Block tileDisplayBlock(){
-        return hoverTile == null ? null : hoverTile.block().synthetic() ? hoverTile.block() : hoverTile.overlay().itemDrop != null ? hoverTile.overlay() : null;
+        return hoverTile == null ? null : hoverTile.block().synthetic() ? hoverTile.block() : hoverTile.drop() != null ? hoverTile.overlay().itemDrop != null ? hoverTile.overlay() : hoverTile.floor() : null;
     }
 }

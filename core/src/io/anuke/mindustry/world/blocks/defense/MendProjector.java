@@ -2,25 +2,20 @@ package io.anuke.mindustry.world.blocks.defense;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.collection.IntSet;
-import io.anuke.arc.graphics.Blending;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
-import io.anuke.arc.util.Tmp;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
 
-import static io.anuke.mindustry.Vars.tilesize;
-import static io.anuke.mindustry.Vars.world;
+import static io.anuke.mindustry.Vars.*;
 
 public class MendProjector extends Block{
     private static Color color = Color.valueOf("84f491");
@@ -43,6 +38,11 @@ public class MendProjector extends Block{
         update = true;
         hasPower = true;
         hasItems = true;
+    }
+
+    @Override
+    public boolean outputsItems(){
+        return false;
     }
 
     @Override
@@ -70,7 +70,7 @@ public class MendProjector extends Block{
 
         entity.phaseHeat = Mathf.lerpDelta(entity.phaseHeat, Mathf.num(entity.cons.optionalValid()), 0.1f);
 
-        if(entity.cons.optionalValid() && entity.timer.get(timerUse, useTime)){
+        if(entity.cons.optionalValid() && entity.timer.get(timerUse, useTime) && entity.power.satisfaction > 0){
             entity.cons.trigger();
         }
 
@@ -78,12 +78,12 @@ public class MendProjector extends Block{
             float realRange = range + entity.phaseHeat * phaseRangeBoost;
             entity.charge = 0f;
 
-            int tileRange = (int)(realRange / tilesize);
+            int tileRange = (int)(realRange / tilesize + 1);
             healed.clear();
 
             for(int x = -tileRange + tile.x; x <= tileRange + tile.x; x++){
                 for(int y = -tileRange + tile.y; y <= tileRange + tile.y; y++){
-                    if(Mathf.dst(x, y, tile.x, tile.y) > tileRange) continue;
+                    if(!Mathf.within(x * tilesize, y * tilesize, tile.drawx(), tile.drawy(), realRange)) continue;
 
                     Tile other = world.ltile(x, y);
 
@@ -101,9 +101,7 @@ public class MendProjector extends Block{
 
     @Override
     public void drawPlace(int x, int y, int rotation, boolean valid){
-        Draw.color(Pal.accent);
-        Lines.dashCircle(x * tilesize, y * tilesize, range);
-        Draw.color();
+        Drawf.dashCircle(x * tilesize + offset(), y * tilesize + offset(), range, Pal.accent);
     }
 
     @Override
@@ -111,9 +109,7 @@ public class MendProjector extends Block{
         MendEntity entity = tile.entity();
         float realRange = range + entity.phaseHeat * phaseRangeBoost;
 
-        Draw.color(color);
-        Lines.dashCircle(tile.drawx(), tile.drawy(), realRange);
-        Draw.color();
+        Drawf.dashCircle(tile.drawx(), tile.drawy(), realRange, color);
     }
 
     @Override
@@ -125,13 +121,13 @@ public class MendProjector extends Block{
 
         Draw.color(color, phase, entity.phaseHeat);
         Draw.alpha(entity.heat * Mathf.absin(Time.time(), 10f, 1f) * 0.5f);
-        Draw.blend(Blending.additive);
+        //Draw.blend(Blending.additive);
         Draw.rect(topRegion, tile.drawx(), tile.drawy());
-        Draw.blend();
+        //Draw.blend();
 
         Draw.alpha(1f);
         Lines.stroke((2f * f + 0.2f) * entity.heat);
-        Lines.circle(tile.drawx(), tile.drawy(), ((1f - f) * 8f) * size / 2f);
+        Lines.square(tile.drawx(), tile.drawy(), ((1f - f) * 8f) * size / 2f);
 
         Draw.reset();
     }
@@ -143,7 +139,7 @@ public class MendProjector extends Block{
 
     class MendEntity extends TileEntity{
         float heat;
-        float charge;
+        float charge = Mathf.random(reload);
         float phaseHeat;
 
         @Override

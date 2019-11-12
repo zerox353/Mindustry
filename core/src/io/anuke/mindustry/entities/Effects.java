@@ -2,19 +2,19 @@ package io.anuke.mindustry.entities;
 
 import io.anuke.arc.Core;
 import io.anuke.arc.collection.Array;
-import io.anuke.arc.function.Consumer;
+import io.anuke.arc.func.Cons;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.math.geom.Position;
 import io.anuke.arc.util.pooling.Pools;
-import io.anuke.mindustry.entities.impl.EffectEntity;
+import io.anuke.mindustry.entities.type.EffectEntity;
 import io.anuke.mindustry.entities.traits.ScaleTrait;
 
 public class Effects{
     private static final EffectContainer container = new EffectContainer();
     private static Array<Effect> effects = new Array<>();
     private static ScreenshakeProvider shakeProvider;
-    private static float shakeFalloff = 1000f;
+    private static float shakeFalloff = 10000f;
     private static EffectProvider provider = (effect, color, x, y, rotation, data) -> {
         EffectEntity entity = Pools.obtain(EffectEntity.class, EffectEntity::new);
         entity.effect = effect;
@@ -49,7 +49,7 @@ public class Effects{
     }
 
     public static void effect(Effect effect, float x, float y, float rotation){
-        provider.createEffect(effect, Color.WHITE, x, y, rotation, null);
+        provider.createEffect(effect, Color.white, x, y, rotation, null);
     }
 
     public static void effect(Effect effect, float x, float y){
@@ -61,7 +61,7 @@ public class Effects{
     }
 
     public static void effect(Effect effect, Position loc){
-        provider.createEffect(effect, Color.WHITE, loc.getX(), loc.getY(), 0f, null);
+        provider.createEffect(effect, Color.white, loc.getX(), loc.getY(), 0f, null);
     }
 
     public static void effect(Effect effect, Color color, float x, float y, float rotation){
@@ -73,7 +73,7 @@ public class Effects{
     }
 
     public static void effect(Effect effect, float x, float y, float rotation, Object data){
-        provider.createEffect(effect, Color.WHITE, x, y, rotation, data);
+        provider.createEffect(effect, Color.white, x, y, rotation, data);
     }
 
     /** Default value is 1000. Higher numbers mean more powerful shake (less falloff). */
@@ -142,11 +142,11 @@ public class Effects{
             this.data = data;
         }
 
-        public void scaled(float lifetime, Consumer<EffectContainer> cons){
+        public void scaled(float lifetime, Cons<EffectContainer> cons){
             if(innerContainer == null) innerContainer = new EffectContainer();
             if(time <= lifetime){
                 innerContainer.set(id, color, time, lifetime, rotation, x, y, data);
-                cons.accept(innerContainer);
+                cons.get(innerContainer);
             }
         }
 

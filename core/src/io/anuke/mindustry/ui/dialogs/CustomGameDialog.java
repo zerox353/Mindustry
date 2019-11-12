@@ -1,16 +1,17 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.scene.ui.ImageButton;
-import io.anuke.arc.scene.ui.ScrollPane;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Align;
-import io.anuke.arc.util.Scaling;
-import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.ui.BorderImage;
-
-import static io.anuke.mindustry.Vars.world;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.maps.*;
+import io.anuke.mindustry.ui.*;
 
 public class CustomGameDialog extends FloatingDialog{
     private MapPlayDialog dialog = new MapPlayDialog();
@@ -32,30 +33,46 @@ public class CustomGameDialog extends FloatingDialog{
 
         Table maps = new Table();
         maps.marginRight(14);
+        maps.marginBottom(55f);
         ScrollPane pane = new ScrollPane(maps);
         pane.setFadeScrollBars(false);
 
-        int maxwidth = (Core.graphics.isPortrait() ? 2 : 4);
+        int maxwidth = Mathf.clamp((int)(Core.graphics.getWidth() / Scl.scl(200)), 1, 8);
         float images = 146f;
 
         int i = 0;
         maps.defaults().width(170).fillY().top().pad(4f);
-        for(Map map : world.maps.all()){
+        for(Map map : Vars.maps.all()){
 
             if(i % maxwidth == 0){
                 maps.row();
             }
 
-            ImageButton image = new ImageButton(new TextureRegion(map.texture), "clear");
+            ImageButton image = new ImageButton(new TextureRegion(map.safeTexture()), Styles.cleari);
             image.margin(5);
-            image.getImageCell().size(images);
             image.top();
-            image.row();
-            image.add("[accent]" + map.name()).pad(3f).growX().wrap().get().setAlignment(Align.center, Align.center);
-            image.row();
-            image.label((() -> Core.bundle.format("level.highscore", map.getHightScore()))).pad(3f);
 
-            BorderImage border = new BorderImage(map.texture, 3f);
+            Image img = image.getImage();
+            img.remove();
+
+            image.row();
+            image.table(t -> {
+                t.left();
+                for(Gamemode mode : Gamemode.all){
+                    if(mode.valid(map) && Core.atlas.has("icon-mode-" + mode.name())){
+                        t.addImage(Core.atlas.drawable("icon-mode-" + mode.name())).size(16f).pad(4f);
+                    }
+                }
+            }).left();
+            image.row();
+            image.add(map.name()).pad(1f).growX().wrap().left().get().setEllipsis(true);
+            image.row();
+            image.addImage(Tex.whiteui, Pal.gray).growX().pad(3).height(4f);
+            image.row();
+            image.add(img).size(images);
+
+
+            BorderImage border = new BorderImage(map.safeTexture(), 3f);
             border.setScaling(Scaling.fit);
             image.replaceImage(border);
 
@@ -66,7 +83,7 @@ public class CustomGameDialog extends FloatingDialog{
             i++;
         }
 
-        if(world.maps.all().size == 0){
+        if(Vars.maps.all().size == 0){
             maps.add("$maps.none").pad(50);
         }
 

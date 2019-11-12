@@ -20,6 +20,7 @@ public class PowerGraph{
     private final ObjectSet<Tile> all = new ObjectSet<>();
 
     private final WindowedMean powerBalance = new WindowedMean(60);
+    private float lastPowerProduced, lastPowerNeeded;
 
     private long lastFrameUpdated = -1;
     private final int graphID;
@@ -37,9 +38,27 @@ public class PowerGraph{
         return powerBalance.getMean();
     }
 
+    public float getLastPowerNeeded(){
+        return lastPowerNeeded;
+    }
+
+    public float getLastPowerProduced(){
+        return lastPowerProduced;
+    }
+
+    public float getSatisfaction(){
+        if(Mathf.isZero(lastPowerProduced)){
+            return 0f;
+        }else if(Mathf.isZero(lastPowerNeeded)){
+            return 1f;
+        }
+        return Mathf.clamp(lastPowerProduced / lastPowerNeeded);
+    }
+
     public float getPowerProduced(){
         float powerProduced = 0f;
         for(Tile producer : producers){
+            if(producer.entity == null) continue;
             powerProduced += producer.block().getPowerProduction(producer) * producer.entity.delta();
         }
         return powerProduced;
@@ -81,6 +100,16 @@ public class PowerGraph{
         return totalCapacity;
     }
 
+    public float getTotalBatteryCapacity(){
+        float totalCapacity = 0f;
+        for(Tile battery : batteries){
+            if(battery.block().consumes.hasPower()){
+                totalCapacity += battery.block().consumes.getPower().capacity;
+            }
+        }
+        return totalCapacity;
+    }
+
     public float useBatteries(float needed){
         float stored = getBatteryStored();
         if(Mathf.isEqual(stored, 0f)) return 0f;
@@ -90,10 +119,7 @@ public class PowerGraph{
         for(Tile battery : batteries){
             Consumers consumes = battery.block().consumes;
             if(consumes.hasPower()){
-                ConsumePower consumePower = consumes.getPower();
-                if(consumePower.capacity > 0f){
-                    battery.entity.power.satisfaction = Math.max(0.0f, battery.entity.power.satisfaction - consumedPowerPercentage);
-                }
+                battery.entity.power.satisfaction *= (1f-consumedPowerPercentage);
             }
         }
         return used;
@@ -149,12 +175,22 @@ public class PowerGraph{
     public void update(){
         if(Core.graphics.getFrameId() == lastFrameUpdated){
             return;
+        }else if(!consumers.isEmpty() && consumers.first().isEnemyCheat()){
+            //when cheating, just set satisfaction to 1
+            for(Tile tile : consumers){
+                tile.entity.power.satisfaction = 1f;
+            }
+
+            return;
         }
 
         lastFrameUpdated = Core.graphics.getFrameId();
 
         float powerNeeded = getPowerNeeded();
         float powerProduced = getPowerProduced();
+
+        lastPowerNeeded = powerNeeded;
+        lastPowerProduced = powerProduced;
 
         powerBalance.addValue((powerProduced - powerNeeded) / Time.delta());
 
@@ -180,11 +216,7 @@ public class PowerGraph{
     }
 
     public void add(Tile tile){
-        if(tile.block().consumes.hasPower() && !tile.block().consumes.getPower().buffered){
-            //reset satisfaction to zero in case of direct consumer. There is no reason to clear power from buffered consumers.
-            tile.entity.power.satisfaction = 0.0f;
-        }
-
+        if(tile.entity == null || tile.entity.power == null) return;
         tile.entity.power.graph = this;
         all.add(tile);
 

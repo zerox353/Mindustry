@@ -71,29 +71,24 @@
                 <key>LSItemContentTypes</key>
                 <array>
                     <string>io.anuke.mindustry.mapfile</string>
-                    <string>io.anuke.mindustry.savefile</string>
                 </array>
             </dict>
-        </array>
 
-        <key>UTExportedTypeDeclarations</key>
-        <array>
             <dict>
-                <key>UTTypeConformsTo</key>
+                <key>CFBundleTypeIconFiles</key>
                 <array>
-                    <string>public.data</string>
+                    <string>icon-72.png</string>
                 </array>
-                <key>UTTypeDescription</key>
-                <string>Mindustry Save File</string>
-                <key>UTTypeIdentifier</key>
-                <string>io.anuke.mindustry.savefile</string>
-                <key>UTTypeTagSpecification</key>
-                <dict>
-                    <key>public.filename-extension</key>
-                    <string>msav</string>
-                    <key>public.mime-type</key>
-                    <string>mindustry/msav</string>
-                </dict>
+                <key>CFBundleTypeName</key>
+                <string>Zip Game Data</string>
+                <key>CFBundleTypeRole</key>
+                <string>Editor</string>
+                <key>LSHandlerRank</key>
+                <string>Owner</string>
+                <key>LSItemContentTypes</key>
+                <array>
+                    <string>public.archive</string>
+                </array>
             </dict>
         </array>
 
@@ -111,9 +106,9 @@
                 <key>UTTypeTagSpecification</key>
                 <dict>
                     <key>public.filename-extension</key>
-                    <string>mmap</string>
+                    <string>msav</string>
                     <key>public.mime-type</key>
-                    <string>mindustry/mmap</string>
+                    <string>mindustry/msav</string>
                 </dict>
             </dict>
         </array>

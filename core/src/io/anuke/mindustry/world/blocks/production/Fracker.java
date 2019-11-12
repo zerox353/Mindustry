@@ -1,12 +1,10 @@
 package io.anuke.mindustry.world.blocks.production;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.meta.*;
 
 public class Fracker extends SolidPump{
     protected final float itemUseTime = 100f;
@@ -37,7 +35,17 @@ public class Fracker extends SolidPump{
     }
 
     @Override
+    public boolean outputsItems(){
+        return false;
+    }
+
+    @Override
     public void drawCracks(Tile tile){}
+
+    @Override
+    public boolean shouldConsume(Tile tile){
+        return tile.entity.liquids.get(result) < liquidCapacity - 0.01f;
+    }
 
     @Override
     public void draw(Tile tile){

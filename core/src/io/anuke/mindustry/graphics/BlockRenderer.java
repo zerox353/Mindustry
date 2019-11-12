@@ -1,22 +1,19 @@
 package io.anuke.mindustry.graphics;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.Sort;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.Texture.TextureFilter;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Fill;
-import io.anuke.arc.graphics.glutils.FrameBuffer;
-import io.anuke.arc.util.Disposable;
-import io.anuke.arc.util.Tmp;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.game.EventType.TileChangeEvent;
-import io.anuke.mindustry.game.EventType.WorldLoadEvent;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.Texture.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.graphics.glutils.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.Teams.*;
+import io.anuke.mindustry.ui.Cicon;
+import io.anuke.mindustry.world.*;
 
 import static io.anuke.arc.Core.camera;
 import static io.anuke.mindustry.Vars.*;
@@ -32,6 +29,7 @@ public class BlockRenderer implements Disposable{
     private int lastCamX, lastCamY, lastRangeX, lastRangeY;
     private int requestidx = 0;
     private int iterateidx = 0;
+    private float brokenFade = 0f;
     private FrameBuffer shadows = new FrameBuffer(2, 2);
     private FrameBuffer fog = new FrameBuffer(2, 2);
     private Array<Tile> outArray = new Array<>();
@@ -50,7 +48,7 @@ public class BlockRenderer implements Disposable{
             shadows.getTexture().setFilter(TextureFilter.Linear, TextureFilter.Linear);
             shadows.resize(world.width(), world.height());
             shadows.begin();
-            Core.graphics.clear(Color.WHITE);
+            Core.graphics.clear(Color.white);
             Draw.proj().setOrtho(0, 0, shadows.getWidth(), shadows.getHeight());
 
             Draw.color(shadowColor);
@@ -71,7 +69,7 @@ public class BlockRenderer implements Disposable{
             fog.getTexture().setFilter(TextureFilter.Linear, TextureFilter.Linear);
             fog.resize(world.width(), world.height());
             fog.begin();
-            Core.graphics.clear(Color.WHITE);
+            Core.graphics.clear(Color.white);
             Draw.proj().setOrtho(0, 0, fog.getWidth(), fog.getHeight());
 
             for(int x = 0; x < world.width(); x++){
@@ -126,6 +124,28 @@ public class BlockRenderer implements Disposable{
         Draw.shader();
     }
 
+    public void drawDestroyed(){
+        if(!Core.settings.getBool("destroyedblocks")) return;
+
+        if(control.input.isPlacing() || control.input.isBreaking()){
+            brokenFade = Mathf.lerpDelta(brokenFade, 1f, 0.1f);
+        }else{
+            brokenFade = Mathf.lerpDelta(brokenFade, 0f, 0.1f);
+        }
+
+        if(brokenFade > 0.001f){
+            for(BrokenBlock block : state.teams.get(player.getTeam()).brokenBlocks){
+                Block b = content.block(block.block);
+                if(!camera.bounds(Tmp.r1).grow(tilesize * 2f).overlaps(Tmp.r2.setSize(b.size * tilesize).setCenter(block.x * tilesize + b.offset(), block.y * tilesize + b.offset()))) continue;
+
+                Draw.alpha(0.53f * brokenFade);
+                Draw.mixcol(Color.white, 0.2f + Mathf.absin(Time.globalTime(), 6f, 0.2f));
+                Draw.rect(b.icon(Cicon.full), block.x * tilesize + b.offset(), block.y * tilesize + b.offset(), b.rotate ? block.rotation * 90 : 0f);
+            }
+            Draw.reset();
+        }
+    }
+
     public void drawShadows(){
         if(!shadowEvents.isEmpty()){
             Draw.flush();
@@ -135,10 +155,10 @@ public class BlockRenderer implements Disposable{
 
             for(Tile tile : shadowEvents){
                 //clear it first
-                Draw.color(Color.WHITE);
+                Draw.color(Color.white);
                 Fill.rect(tile.x + 0.5f, tile.y + 0.5f, 1, 1);
                 //then draw the shadow
-                Draw.color(!tile.block().hasShadow ? Color.WHITE : shadowColor);
+                Draw.color(!tile.block().hasShadow ? Color.white : shadowColor);
                 Fill.rect(tile.x + 0.5f, tile.y + 0.5f, 1, 1);
             }
 
@@ -254,28 +274,34 @@ public class BlockRenderer implements Disposable{
     }
 
     public void drawBlocks(Layer stopAt){
-
+        int startIdx = iterateidx;
         for(; iterateidx < requestidx; iterateidx++){
+            BlockRequest request = requests.get(iterateidx);
 
-            if(iterateidx < requests.size && requests.get(iterateidx).layer.ordinal() > stopAt.ordinal()){
+            if(request.layer.ordinal() > stopAt.ordinal()){
                 break;
             }
 
-            BlockRequest req = requests.get(iterateidx);
-            Block block = req.tile.block();
+            if(request.layer == Layer.power){
+                if(iterateidx - startIdx > 0 && request.tile.pos() == requests.get(iterateidx - 1).tile.pos()){
+                    continue;
+                }
+            }
 
-            if(req.layer == Layer.block){
-                block.draw(req.tile);
-                if(req.tile.entity != null && req.tile.entity.damaged()){
-                    block.drawCracks(req.tile);
+            Block block = request.tile.block();
+
+            if(request.layer == Layer.block){
+                block.draw(request.tile);
+                if(request.tile.entity != null && request.tile.entity.damaged()){
+                    block.drawCracks(request.tile);
                 }
-                if(block.synthetic() && req.tile.getTeam() != player.getTeam()){
-                    block.drawTeam(req.tile);
+                if(block.synthetic() && request.tile.getTeam() != player.getTeam()){
+                    block.drawTeam(request.tile);
                 }
-            }else if(req.layer == block.layer){
-                block.drawLayer(req.tile);
-            }else if(req.layer == block.layer2){
-                block.drawLayer2(req.tile);
+            }else if(request.layer == block.layer){
+                block.drawLayer(request.tile);
+            }else if(request.layer == block.layer2){
+                block.drawLayer2(request.tile);
             }
         }
     }
@@ -340,7 +366,9 @@ public class BlockRenderer implements Disposable{
 
         @Override
         public int compareTo(BlockRequest other){
-            return layer.compareTo(other.layer);
+            int compare = layer.compareTo(other.layer);
+
+            return (compare != 0) ? compare : Integer.compare(tile.pos(), other.tile.pos());
         }
 
         @Override

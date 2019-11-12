@@ -1,29 +1,29 @@
 package io.anuke.mindustry.entities.type;
 
-import io.anuke.annotations.Annotations.Loc;
-import io.anuke.annotations.Annotations.Remote;
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Angles;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.math.geom.Rectangle;
-import io.anuke.arc.util.Interval;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.content.StatusEffects;
-import io.anuke.mindustry.entities.EntityGroup;
-import io.anuke.mindustry.entities.Units;
-import io.anuke.mindustry.entities.traits.ShooterTrait;
-import io.anuke.mindustry.entities.traits.TargetTrait;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.ArcAnnotate.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.traits.*;
 import io.anuke.mindustry.entities.units.*;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.gen.Call;
-import io.anuke.mindustry.net.Net;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.meta.BlockFlag;
+import io.anuke.mindustry.type.TypeID;
+import io.anuke.mindustry.ui.Cicon;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.*;
+import io.anuke.mindustry.world.blocks.defense.DeflectorWall.*;
+import io.anuke.mindustry.world.blocks.units.CommandCenter.*;
+import io.anuke.mindustry.world.blocks.units.UnitFactory.*;
+import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
 
@@ -31,7 +31,6 @@ import static io.anuke.mindustry.Vars.*;
 
 /** Base class for AI units. */
 public abstract class BaseUnit extends Unit implements ShooterTrait{
-
     protected static int timerIndex = 0;
 
     protected static final int timerTarget = timerIndex++;
@@ -39,6 +38,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     protected static final int timerShootLeft = timerIndex++;
     protected static final int timerShootRight = timerIndex++;
 
+    protected boolean loaded;
     protected UnitType type;
     protected Interval timer = new Interval(5);
     protected StateMachine state = new StateMachine();
@@ -54,16 +54,17 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     public static void onUnitDeath(BaseUnit unit){
         if(unit == null) return;
 
-        if(Net.server() || !Net.active()){
+        if(net.server() || !net.active()){
             UnitDrops.dropItems(unit);
         }
 
         unit.onSuperDeath();
+        unit.type.deathSound.at(unit);
 
         //visual only.
-        if(Net.client()){
+        if(net.client()){
             Tile tile = world.tile(unit.spawner);
-            if(tile != null && !Net.client()){
+            if(tile != null){
                 tile.block().unitRemoved(tile, unit);
             }
 
@@ -77,6 +78,43 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     @Override
     public float drag(){
         return type.drag;
+    }
+
+    @Override
+    public TypeID getTypeID(){
+        return type.typeID;
+    }
+
+    @Override
+    public void onHit(SolidTrait entity){
+        if(entity instanceof Bullet && ((Bullet)entity).getOwner() instanceof DeflectorEntity && player != null && getTeam() != player.getTeam()){
+            Core.app.post(() -> {
+                if(isDead()){
+                    Events.fire(Trigger.phaseDeflectHit);
+                }
+            });
+        }
+    }
+
+    public @Nullable
+    Tile getSpawner(){
+        return world.tile(spawner);
+    }
+
+    public boolean isCommanded(){
+        return indexer.getAllied(team, BlockFlag.comandCenter).size != 0 && indexer.getAllied(team, BlockFlag.comandCenter).first().entity instanceof CommandCenterEntity;
+    }
+
+    public @Nullable UnitCommand getCommand(){
+        if(isCommanded()){
+            return indexer.getAllied(team, BlockFlag.comandCenter).first().<CommandCenterEntity>entity().command;
+        }
+        return null;
+    }
+
+    /**Called when a command is recieved from the command center.*/
+    public void onCommand(UnitCommand command){
+
     }
 
     /** Initialize the type and team of this unit. Only call once! */
@@ -100,17 +138,16 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     }
 
     public boolean targetHasFlag(BlockFlag flag){
-        return target instanceof TileEntity && ((TileEntity)target).tile.block().flags.contains(flag);
+        return (target instanceof TileEntity && ((TileEntity)target).tile.block().flags.contains(flag)) ||
+        (target instanceof Tile && ((Tile)target).block().flags.contains(flag));
     }
 
     public void setState(UnitState state){
         this.state.set(state);
     }
 
-    public void retarget(Runnable run){
-        if(timer.get(timerTarget, 20)){
-            run.run();
-        }
+    public boolean retarget(){
+        return timer.get(timerTarget, 20);
     }
 
     /** Only runs when the unit has a target. */
@@ -126,12 +163,12 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     }
 
     public void targetClosestAllyFlag(BlockFlag flag){
-        Tile target = Geometry.findClosest(x, y, world.indexer.getAllied(team, flag));
+        Tile target = Geometry.findClosest(x, y, indexer.getAllied(team, flag));
         if(target != null) this.target = target.entity;
     }
 
     public void targetClosestEnemyFlag(BlockFlag flag){
-        Tile target = Geometry.findClosest(x, y, world.indexer.getEnemy(team, flag));
+        Tile target = Geometry.findClosest(x, y, indexer.getEnemy(team, flag));
         if(target != null) this.target = target.entity;
     }
 
@@ -142,8 +179,15 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
         }
     }
 
-    public TileEntity getClosestEnemyCore(){
+    public Tile getClosest(BlockFlag flag){
+        return Geometry.findClosest(x, y, indexer.getAllied(team, flag));
+    }
 
+    public Tile getClosestSpawner(){
+        return Geometry.findClosest(x, y, Vars.spawner.getGroundSpawns());
+    }
+
+    public TileEntity getClosestEnemyCore(){
         for(Team enemy : Vars.state.teams.enemiesOf(team)){
             Tile tile = Geometry.findClosest(x, y, Vars.state.teams.get(enemy).cores);
             if(tile != null){
@@ -156,22 +200,6 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     public UnitState getStartState(){
         return null;
-    }
-
-    protected void drawItems(){
-        float backTrns = 4f;
-        if(item.amount > 0){
-            int stored = Mathf.clamp(item.amount / 6, 1, 8);
-
-            for(int i = 0; i < stored; i++){
-                float angT = i == 0 ? 0 : Mathf.randomSeedRange(i + 2, 60f);
-                float lenT = i == 0 ? 0 : Mathf.randomSeedRange(i + 3, 1f) - 1f;
-                Draw.rect(item.item.icon(Item.Icon.large),
-                x + Angles.trnsx(rotation + 180f + angT, backTrns + lenT),
-                y + Angles.trnsy(rotation + 180f + angT, backTrns + lenT),
-                itemSize, itemSize, rotation);
-            }
-        }
     }
 
     public boolean isBoss(){
@@ -210,7 +238,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     @Override
     public TextureRegion getIconRegion(){
-        return type.iconRegion;
+        return type.icon(Cicon.full);
     }
 
     @Override
@@ -239,7 +267,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
     @Override
     public boolean isFlying(){
-        return type.isFlying;
+        return type.flying;
     }
 
     @Override
@@ -252,19 +280,19 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
 
         hitTime -= Time.delta();
 
-        if(Net.client()){
+        if(net.client()){
             interpolate();
             status.update(this);
             return;
         }
 
-        if(!isFlying() && (world.tileWorld(x, y) != null && world.tileWorld(x, y).solid())){
+        if(!isFlying() && (world.tileWorld(x, y) != null && !(world.tileWorld(x, y).block() instanceof BuildBlock) && world.tileWorld(x, y).solid())){
             kill();
         }
 
         avoidOthers();
 
-        if(spawner != noSpawner && (world.tile(spawner) == null || world.tile(spawner).entity == null)){
+        if(spawner != noSpawner && (world.tile(spawner) == null || !(world.tile(spawner).entity instanceof UnitFactoryEntity))){
             kill();
         }
 
@@ -294,7 +322,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     public void removed(){
         super.removed();
         Tile tile = world.tile(spawner);
-        if(tile != null && !Net.client()){
+        if(tile != null && !net.client()){
             tile.block().unitRemoved(tile, this);
         }
 
@@ -315,7 +343,13 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     public void added(){
         state.set(getStartState());
 
-        health(maxHealth());
+        if(!loaded){
+            health(maxHealth());
+        }
+
+        if(isCommanded()){
+            onCommand(getCommand());
+        }
     }
 
     @Override
@@ -348,6 +382,7 @@ public abstract class BaseUnit extends Unit implements ShooterTrait{
     @Override
     public void readSave(DataInput stream, byte version) throws IOException{
         super.readSave(stream, version);
+        loaded = true;
         byte type = stream.readByte();
         this.spawner = stream.readInt();
 

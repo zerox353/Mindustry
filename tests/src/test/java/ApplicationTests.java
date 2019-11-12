@@ -1,7 +1,7 @@
 import io.anuke.arc.ApplicationCore;
+import io.anuke.arc.Core;
 import io.anuke.arc.backends.headless.HeadlessApplication;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.math.Mathf;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.math.geom.Point2;
 import io.anuke.arc.util.Log;
 import io.anuke.arc.util.Time;
@@ -10,13 +10,14 @@ import io.anuke.mindustry.content.*;
 import io.anuke.mindustry.core.GameState.State;
 import io.anuke.mindustry.core.*;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
-import io.anuke.mindustry.entities.type.base.Spirit;
-import io.anuke.mindustry.game.*;
-import io.anuke.mindustry.gen.ItemPos;
-import io.anuke.mindustry.io.BundleLoader;
+import io.anuke.mindustry.entities.type.BaseUnit;
+import io.anuke.mindustry.entities.type.base.*;
+import io.anuke.mindustry.game.Team;
 import io.anuke.mindustry.io.SaveIO;
 import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.net.*;
+import io.anuke.mindustry.type.ContentType;
+import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.world.*;
 import io.anuke.mindustry.world.blocks.BlockPart;
 import org.junit.jupiter.api.*;
@@ -42,25 +43,23 @@ public class ApplicationTests{
             ApplicationCore core = new ApplicationCore(){
                 @Override
                 public void setup(){
-                    Vars.init();
-
                     headless = true;
-
-                    BundleLoader.load();
-                    content.load();
+                    net = new Net(null);
+                    tree = new FileTree();
+                    Vars.init();
+                    content.createContent();
 
                     add(logic = new Logic());
-                    add(world = new World());
                     add(netServer = new NetServer());
 
-                    content.initialize(Content::init);
+                    content.init();
                 }
 
                 @Override
                 public void init(){
                     super.init();
                     begins[0] = true;
-                    testMap = world.maps.loadInternalMap("groundZero");
+                    testMap = maps.loadInternalMap("groundZero");
                 }
             };
 
@@ -99,7 +98,7 @@ public class ApplicationTests{
     @Test
     void spawnWaves(){
         world.loadMap(testMap);
-        assertTrue(world.spawner.countSpawns() > 0, "No spawns present.");
+        assertTrue(spawner.countSpawns() > 0, "No spawns present.");
         logic.runWave();
         //force trigger delayed spawns
         Time.setDeltaProvider(() -> 1000f);
@@ -128,8 +127,8 @@ public class ApplicationTests{
         createMap();
         int bx = 4;
         int by = 4;
-        world.setBlock(world.tile(bx, by), Blocks.coreShard, Team.blue);
-        assertEquals(world.tile(bx, by).getTeam(), Team.blue);
+        world.setBlock(world.tile(bx, by), Blocks.coreShard, Team.sharded);
+        assertEquals(world.tile(bx, by).getTeam(), Team.sharded);
         for(int x = bx - 1; x <= bx + 1; x++){
             for(int y = by - 1; y <= by + 1; y++){
                 if(x == bx && by == y){
@@ -199,7 +198,7 @@ public class ApplicationTests{
     void save(){
         world.loadMap(testMap);
         assertTrue(state.teams.get(defaultTeam).cores.size > 0);
-        SaveIO.saveToSlot(0);
+        SaveIO.save(saveDirectory.child("0.msav"));
     }
 
     @Test
@@ -207,13 +206,54 @@ public class ApplicationTests{
         world.loadMap(testMap);
         Map map = world.getMap();
 
-        SaveIO.saveToSlot(0);
+        SaveIO.save(saveDirectory.child("0.msav"));
         resetWorld();
-        SaveIO.loadFromSlot(0);
+        SaveIO.load(saveDirectory.child("0.msav"));
 
         assertEquals(world.width(), map.width);
         assertEquals(world.height(), map.height);
         assertTrue(state.teams.get(defaultTeam).cores.size > 0);
+    }
+
+    @Test
+    void loadOldSave(){
+        resetWorld();
+        SaveIO.load(Core.files.internal("build77.msav"));
+
+        //just tests if the map was loaded properly and didn't crash, no validity checks currently
+        assertEquals(276, world.width());
+        assertEquals(10, world.height());
+    }
+
+    @Test
+    void arrayIterators(){
+        Array<String> arr = Array.with("a", "b" , "c", "d", "e", "f");
+        Array<String> results = new Array<>();
+
+        for(String s : arr);
+        for(String s : results);
+
+        Array.iteratorsAllocated = 0;
+
+        //simulate non-enhanced for loops, which should be correct
+
+        for(int i = 0; i < arr.size; i++){
+            for(int j = 0; j < arr.size; j++){
+                results.add(arr.get(i) + arr.get(j));
+            }
+        }
+
+        int index = 0;
+
+        //test nested for loops
+        for(String s : arr){
+            for(String s2 : arr){
+                assertEquals(results.get(index++), s + s2);
+            }
+        }
+
+        assertEquals(results.size, index);
+        assertEquals(0, Array.iteratorsAllocated, "No new iterators must have been allocated.");
     }
 
     @Test
@@ -239,8 +279,8 @@ public class ApplicationTests{
     void buildingOverlap(){
         initBuilding();
 
-        Spirit d1 = (Spirit)UnitTypes.spirit.create(Team.blue);
-        Spirit d2 = (Spirit)UnitTypes.spirit.create(Team.blue);
+        Phantom d1 = (Phantom)UnitTypes.phantom.create(Team.sharded);
+        Phantom d2 = (Phantom)UnitTypes.phantom.create(Team.sharded);
 
         d1.set(10f, 20f);
         d2.set(10f, 20f);
@@ -258,44 +298,11 @@ public class ApplicationTests{
     }
 
     @Test
-    void zoneEmptyWaves(){
-        for(Zone zone : content.zones()){
-            Array<SpawnGroup> spawns = zone.rules.get().spawns;
-            for(int i = 1; i <= 100; i++){
-                int total = 0;
-                for(SpawnGroup spawn : spawns){
-                    total += spawn.getUnitsSpawned(i);
-                }
-
-                assertNotEquals(0, total, "Zone " + zone + " has no spawned enemies at wave " + i);
-            }
-        }
-    }
-
-    @Test
-    void zoneOverflowWaves(){
-        for(Zone zone : content.zones()){
-            Array<SpawnGroup> spawns = zone.rules.get().spawns;
-
-            for(int i = 1; i <= 40; i++){
-                int total = 0;
-                for(SpawnGroup spawn : spawns){
-                    total += spawn.getUnitsSpawned(i);
-                }
-
-                if(total >= 140){
-                    fail("Zone '" + zone + "' has too many spawned enemies at wave " + i + " : " + total);
-                }
-            }
-        }
-    }
-
-    @Test
     void buildingDestruction(){
         initBuilding();
 
-        Spirit d1 = (Spirit)UnitTypes.spirit.create(Team.blue);
-        Spirit d2 = (Spirit)UnitTypes.spirit.create(Team.blue);
+        Phantom d1 = (Phantom)UnitTypes.phantom.create(Team.sharded);
+        Phantom d2 = (Phantom)UnitTypes.phantom.create(Team.sharded);
 
         d1.set(10f, 20f);
         d2.set(10f, 20f);
@@ -322,7 +329,7 @@ public class ApplicationTests{
 
     @Test
     void allBlockTest(){
-        Tile[][] tiles = world.createTiles(256 + 20, 10);
+        Tile[][] tiles = world.createTiles(256*2 + 20, 10);
 
         world.beginMapLoad();
         for(int x = 0; x < tiles.length; x++){
@@ -334,7 +341,8 @@ public class ApplicationTests{
 
         for(int x = 5; x < tiles.length && i < content.blocks().size; ){
             Block block = content.block(i++);
-            if(block.buildVisibility.get()){
+            if(block.isBuildable()){
+                x += block.size;
                 tiles[x][5].setBlock(block);
                 x += block.size;
             }
@@ -391,15 +399,16 @@ public class ApplicationTests{
         createMap();
 
         Tile core = world.tile(5, 5);
-        world.setBlock(core, Blocks.coreShard, Team.blue);
+        world.setBlock(core, Blocks.coreShard, Team.sharded);
         for(Item item : content.items()){
             core.entity.items.set(item, 3000);
         }
 
-        assertEquals(core, state.teams.get(Team.blue).cores.first());
+        assertEquals(core, state.teams.get(Team.sharded).cores.first());
     }
 
     void depositTest(Block block, Item item){
+        BaseUnit unit = UnitTypes.spirit.create(Team.derelict);
         Tile tile = new Tile(0, 0, Blocks.air.id, (byte)0, block.id);
         int capacity = tile.block().itemCapacity;
 

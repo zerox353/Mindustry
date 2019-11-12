@@ -1,35 +1,35 @@
 package io.anuke.mindustry.editor;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.StringMap;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.Pixmap;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.input.KeyCode;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Vector2;
-import io.anuke.arc.scene.actions.Actions;
-import io.anuke.arc.scene.style.TextureRegionDrawable;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.func.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.actions.*;
+import io.anuke.arc.scene.event.*;
+import io.anuke.arc.scene.style.*;
 import io.anuke.arc.scene.ui.*;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.scene.ui.layout.Unit;
+import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.core.Platform;
+import io.anuke.arc.util.ArcAnnotate.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.core.GameState.*;
 import io.anuke.mindustry.game.*;
-import io.anuke.mindustry.io.JsonIO;
-import io.anuke.mindustry.io.MapIO;
-import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.ui.dialogs.FloatingDialog;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Block.Icon;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.blocks.OverlayFloor;
-import io.anuke.mindustry.world.blocks.storage.CoreBlock;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.maps.*;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.ui.Cicon;
+import io.anuke.mindustry.ui.dialogs.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.*;
+import io.anuke.mindustry.world.blocks.storage.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -49,98 +49,143 @@ public class MapEditorDialog extends Dialog implements Disposable{
     private Array<Block> blocksOut = new Array<>();
 
     public MapEditorDialog(){
-        super("", "dialog");
+        super("");
 
-        background("dark");
+        background(Styles.black);
 
         editor = new MapEditor();
         view = new MapView(editor);
         infoDialog = new MapInfoDialog(editor);
-        generateDialog = new MapGenerateDialog(editor);
+        generateDialog = new MapGenerateDialog(editor, true);
 
         menu = new FloatingDialog("$menu");
         menu.addCloseButton();
 
-        float isize = 16 * 2f;
         float swidth = 180f;
 
         menu.cont.table(t -> {
             t.defaults().size(swidth, 60f).padBottom(5).padRight(5).padLeft(5);
 
-            t.addImageTextButton("$editor.savemap", "icon-floppy-16", isize, this::save);
+            t.addImageTextButton("$editor.savemap", Icon.floppy16Small, this::save);
 
-            t.addImageTextButton("$editor.mapinfo", "icon-pencil", isize, () -> {
+            t.addImageTextButton("$editor.mapinfo", Icon.pencilSmall, () -> {
                 infoDialog.show();
                 menu.hide();
             });
 
             t.row();
 
-            t.addImageTextButton("$editor.generate", "icon-editor", isize, () -> {
-                generateDialog.show();
+            t.addImageTextButton("$editor.generate", Icon.editorSmall, () -> {
+                generateDialog.show(generateDialog::applyToEditor);
                 menu.hide();
             });
 
-            t.addImageTextButton("$editor.resize", "icon-resize", isize, () -> {
+            t.addImageTextButton("$editor.resize", Icon.resizeSmall, () -> {
                 resizeDialog.show();
                 menu.hide();
             });
 
             t.row();
 
-            t.addImageTextButton("$editor.import", "icon-load-map", isize, () ->
-                createDialog("$editor.import",
-                "$editor.importmap", "$editor.importmap.description", "icon-load-map", (Runnable)loadDialog::show,
-                "$editor.importfile", "$editor.importfile.description", "icon-file", (Runnable)() ->
-                Platform.instance.showFileChooser("$editor.loadmap", "Map Files", file -> ui.loadAnd(() -> {
-                    try{
-                        //TODO what if it's an image? users should be warned for their stupidity
+            t.addImageTextButton("$editor.import", Icon.loadMapSmall, () ->
+            createDialog("$editor.import",
+            "$editor.importmap", "$editor.importmap.description", Icon.loadMap, (Runnable)loadDialog::show,
+            "$editor.importfile", "$editor.importfile.description", Icon.file, (Runnable)() ->
+            platform.showFileChooser(true, mapExtension, file -> ui.loadAnd(() -> {
+                maps.tryCatchMapError(() -> {
+                    if(MapIO.isImage(file)){
+                        ui.showInfo("$editor.errorimage");
+                    }else{
                         editor.beginEdit(MapIO.createMap(file, true));
-                    }catch(Exception e){
-                        ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
-                        Log.err(e);
                     }
-                }), true, mapExtension),
+                });
+            })),
 
-                "$editor.importimage", "$editor.importimage.description", "icon-file-image", (Runnable)() ->
-                Platform.instance.showFileChooser("$loadimage", "Image Files", file ->
-                ui.loadAnd(() -> {
-                    try{
-                        Pixmap pixmap = new Pixmap(file);
-                        editor.beginEdit(pixmap);
-                        pixmap.dispose();
-                    }catch(Exception e){
-                        ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
-                        Log.err(e);
-                    }
-                }), true, "png"))
+            "$editor.importimage", "$editor.importimage.description", Icon.fileImage, (Runnable)() ->
+            platform.showFileChooser(true, "png", file ->
+            ui.loadAnd(() -> {
+                try{
+                    Pixmap pixmap = new Pixmap(file);
+                    editor.beginEdit(pixmap);
+                    pixmap.dispose();
+                }catch(Exception e){
+                    ui.showException("$editor.errorload", e);
+                    Log.err(e);
+                }
+            })))
             );
 
-            t.addImageTextButton("$editor.export", "icon-save-map", isize, () ->
-                Platform.instance.showFileChooser("$editor.savemap", "Map Files", file -> {
-                    file = file.parent().child(file.nameWithoutExtension() + "." + mapExtension);
-                    FileHandle result = file;
+            t.addImageTextButton("$editor.export", Icon.saveMapSmall, () -> {
+                if(!ios){
+                    platform.showFileChooser(false, mapExtension, file -> {
+                        ui.loadAnd(() -> {
+                            try{
+                                if(!editor.getTags().containsKey("name")){
+                                    editor.getTags().put("name", file.nameWithoutExtension());
+                                }
+                                MapIO.writeMap(file, editor.createMap(file));
+                            }catch(Exception e){
+                                ui.showException("$editor.errorsave", e);
+                                Log.err(e);
+                            }
+                        });
+                    });
+                }else{
                     ui.loadAnd(() -> {
                         try{
-                            if(!editor.getTags().containsKey("name")){
-                                editor.getTags().put("name", result.nameWithoutExtension());
-                            }
+                            FileHandle result = Core.files.local(editor.getTags().get("name", "unknown") + "." + mapExtension);
                             MapIO.writeMap(result, editor.createMap(result));
+                            platform.shareFile(result);
                         }catch(Exception e){
-                            ui.showError(Core.bundle.format("editor.errorsave", Strings.parseException(e, false)));
+                            ui.showException("$editor.errorsave", e);
                             Log.err(e);
                         }
                     });
-                }, false, mapExtension));
+                }
+            });
         });
 
         menu.cont.row();
 
-        menu.cont.addImageTextButton("$editor.ingame", "icon-arrow", isize, this::playtest).padTop(-5).size(swidth * 2f + 10, 60f);
+        if(steam){
+            menu.cont.addImageTextButton("$editor.publish.workshop", Icon.linkSmall, () -> {
+                Map builtin = maps.all().find(m -> m.name().equals(editor.getTags().get("name", "").trim()));
+
+                if(editor.getTags().containsKey("steamid") && builtin != null && !builtin.custom){
+                    platform.viewListingID(editor.getTags().get("steamid"));
+                    return;
+                }
+
+                Map map = save();
+
+                if(editor.getTags().containsKey("steamid") && map != null){
+                    platform.viewListing(map);
+                    return;
+                }
+
+                if(map == null) return;
+
+                if(map.tags.get("description", "").length() < 4){
+                    ui.showErrorMessage("$editor.nodescription");
+                    return;
+                }
+
+                if(!Structs.contains(Gamemode.all, g -> g.valid(map))){
+                    ui.showErrorMessage("$map.nospawn");
+                    return;
+                }
+
+                platform.publish(map);
+            }).padTop(-3).size(swidth * 2f + 10, 60f).update(b -> b.setText(editor.getTags().containsKey("steamid") ? editor.getTags().get("author").equals(player.name) ? "$workshop.listing" : "$view.workshop" : "$editor.publish.workshop"));
+
+            menu.cont.row();
+        }
+
+        menu.cont.addImageTextButton("$editor.ingame", Icon.arrowSmall, this::playtest).padTop(!steam ? -3 : 1).size(swidth * 2f + 10, 60f);
 
         menu.cont.row();
 
-        menu.cont.addImageTextButton("$quit", "icon-back", isize, () -> {
+        menu.cont.addImageTextButton("$quit", Icon.backSmall, () -> {
             tryExit();
             menu.hide();
         }).size(swidth * 2f + 10, 60f);
@@ -153,12 +198,11 @@ public class MapEditorDialog extends Dialog implements Disposable{
             }
         });
 
-        loadDialog = new MapLoadDialog(map ->
-        ui.loadAnd(() -> {
+        loadDialog = new MapLoadDialog(map -> ui.loadAnd(() -> {
             try{
                 editor.beginEdit(map);
             }catch(Exception e){
-                ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
+                ui.showException("$editor.errorload", e);
                 Log.err(e);
             }
         }));
@@ -167,19 +211,10 @@ public class MapEditorDialog extends Dialog implements Disposable{
 
         clearChildren();
         margin(0);
-        shown(this::build);
 
         update(() -> {
             if(Core.scene.getKeyboardFocus() instanceof Dialog && Core.scene.getKeyboardFocus() != this){
                 return;
-            }
-
-            Vector2 v = pane.stageToLocalCoordinates(Core.input.mouse());
-
-            if(v.x >= 0 && v.y >= 0 && v.x <= pane.getWidth() && v.y <= pane.getHeight()){
-                Core.scene.setScrollFocus(pane);
-            }else{
-                Core.scene.setScrollFocus(null);
             }
 
             if(Core.scene != null && Core.scene.getKeyboardFocus() == this){
@@ -188,31 +223,29 @@ public class MapEditorDialog extends Dialog implements Disposable{
         });
 
         shown(() -> {
-            //clear units, rules and other unnecessary stuff
-            logic.reset();
+
             saved = true;
-            if(!Core.settings.getBool("landscape")) Platform.instance.beginForceLandscape();
+            if(!Core.settings.getBool("landscape")) platform.beginForceLandscape();
             editor.clearOp();
             Core.scene.setScrollFocus(view);
             if(!shownWithMap){
+                //clear units, rules and other unnecessary stuff
+                logic.reset();
                 state.rules = new Rules();
                 editor.beginEdit(200, 200);
             }
             shownWithMap = false;
 
-            Time.runTask(10f, Platform.instance::updateRPC);
+            Time.runTask(10f, platform::updateRPC);
         });
 
         hidden(() -> {
             editor.clearOp();
-            Platform.instance.updateRPC();
-            if(!Core.settings.getBool("landscape")) Platform.instance.endForceLandscape();
+            platform.updateRPC();
+            if(!Core.settings.getBool("landscape")) platform.endForceLandscape();
         });
-    }
 
-    @Override
-    protected void drawBackground(float x, float y){
-        drawDefaultBackground(x, y);
+        shown(this::build);
     }
 
     public void resumeEditing(){
@@ -230,8 +263,10 @@ public class MapEditorDialog extends Dialog implements Disposable{
             lastSavedRules = state.rules;
             hide();
             //only reset the player; logic.reset() will clear entities, which we do not want
+            state.teams = new Teams();
             player.reset();
-            state.rules = Gamemode.editor.apply(new Rules());
+            state.rules = Gamemode.editor.apply(lastSavedRules.copy());
+            state.rules.zone = null;
             world.setMap(new Map(StringMap.of(
                 "name", "Editor Playtesting",
                 "width", editor.width(),
@@ -253,25 +288,39 @@ public class MapEditorDialog extends Dialog implements Disposable{
         });
     }
 
-    private void save(){
+    public @Nullable Map save(){
+        boolean isEditor = state.rules.editor;
+        state.rules.editor = false;
         String name = editor.getTags().get("name", "").trim();
         editor.getTags().put("rules", JsonIO.write(state.rules));
+        editor.getTags().remove("width");
+        editor.getTags().remove("height");
+        player.dead = true;
+
+        Map returned = null;
 
         if(name.isEmpty()){
             infoDialog.show();
-            Core.app.post(() -> ui.showError("$editor.save.noname"));
+            Core.app.post(() -> ui.showErrorMessage("$editor.save.noname"));
         }else{
-            Map map = world.maps.all().find(m -> m.name().equals(name));
+            Map map = maps.all().find(m -> m.name().equals(name));
             if(map != null && !map.custom){
-                ui.showError("$editor.save.overwrite");
+                handleSaveBuiltin(map);
             }else{
-                world.maps.saveMap(editor.getTags());
+                returned = maps.saveMap(editor.getTags());
                 ui.showInfoFade("$editor.saved");
             }
         }
 
         menu.hide();
         saved = true;
+        state.rules.editor = isEditor;
+        return returned;
+    }
+
+    /** Called when a built-in map save is attempted.*/
+    protected void handleSaveBuiltin(Map map){
+        ui.showErrorMessage("$editor.save.overwrite");
     }
 
     /**
@@ -291,7 +340,7 @@ public class MapEditorDialog extends Dialog implements Disposable{
         for(int i = 0; i < arguments.length; i += 4){
             String name = (String)arguments[i];
             String description = (String)arguments[i + 1];
-            String iconname = (String)arguments[i + 2];
+            Drawable iconname = (Drawable)arguments[i + 2];
             Runnable listenable = (Runnable)arguments[i + 3];
 
             TextButton button = dialog.cont.addButton(name, () -> {
@@ -301,11 +350,11 @@ public class MapEditorDialog extends Dialog implements Disposable{
             }).left().margin(0).get();
 
             button.clearChildren();
-            button.addImage(iconname).size(16 * 3).padLeft(10);
+            button.addImage(iconname).padLeft(10);
             button.table(t -> {
                 t.add(name).growX().wrap();
                 t.row();
-                t.add(description).color(Color.GRAY).growX().wrap();
+                t.add(description).color(Color.gray).growX().wrap();
             }).growX().pad(10f).padLeft(5);
 
             button.row();
@@ -319,7 +368,12 @@ public class MapEditorDialog extends Dialog implements Disposable{
 
     @Override
     public Dialog show(){
-        return super.show(Core.scene, Actions.sequence(Actions.alpha(0f), Actions.scaleTo(1f, 1f), Actions.fadeIn(0.3f)));
+        return super.show(Core.scene, Actions.sequence(Actions.alpha(1f)));
+    }
+
+    @Override
+    public void hide(){
+        super.hide(Actions.sequence(Actions.alpha(0f)));
     }
 
     @Override
@@ -335,13 +389,17 @@ public class MapEditorDialog extends Dialog implements Disposable{
                 show();
             }catch(Exception e){
                 Log.err(e);
-                ui.showError(Core.bundle.format("editor.errorload", Strings.parseException(e, false)));
+                ui.showException("$editor.errorload", e);
             }
         });
     }
 
     public MapView getView(){
         return view;
+    }
+
+    public MapGenerateDialog getGenerateDialog(){
+        return generateDialog;
     }
 
     public void resetSaved(){
@@ -353,10 +411,7 @@ public class MapEditorDialog extends Dialog implements Disposable{
     }
 
     public void build(){
-        float amount = 10f, baseSize = 60f;
-
-        float size = mobile ? (int)(Math.min(Core.graphics.getHeight(), Core.graphics.getWidth()) / amount / Unit.dp.scl(1f)) :
-        Math.min(Core.graphics.getDisplayMode().height / amount, baseSize);
+        float size = 60f;
 
         clearChildren();
         table(cont -> {
@@ -368,53 +423,118 @@ public class MapEditorDialog extends Dialog implements Disposable{
                 Table tools = new Table().top();
 
                 ButtonGroup<ImageButton> group = new ButtonGroup<>();
+                Table[] lastTable = {null};
 
-                Consumer<EditorTool> addTool = tool -> {
-                    ImageButton button = new ImageButton("icon-" + tool.name(), "clear-toggle");
-                    button.clicked(() -> view.setTool(tool));
-                    button.resizeImage(16 * 2f);
+                Cons<EditorTool> addTool = tool -> {
+
+                    ImageButton button = new ImageButton(Core.atlas.drawable("icon-" + tool.name() + "-small"), Styles.clearTogglei);
+                    button.clicked(() -> {
+                        view.setTool(tool);
+                        if(lastTable[0] != null){
+                            lastTable[0].remove();
+                        }
+                    });
                     button.update(() -> button.setChecked(view.getTool() == tool));
                     group.add(button);
-                    if(tool == EditorTool.pencil)
-                        button.setChecked(true);
 
-                    tools.add(button);
+                    if(tool.altModes.length > 0){
+                        button.clicked(l -> {
+                            if(!mobile){
+                                //desktop: rightclick
+                                l.setButton(KeyCode.MOUSE_RIGHT);
+                            }
+                        }, e -> {
+                            //need to double tap
+                            if(mobile && e.getTapCount() < 2){
+                                return;
+                            }
+
+                            if(lastTable[0] != null){
+                                lastTable[0].remove();
+                            }
+
+                            Table table = new Table(Styles.black9);
+                            table.defaults().size(300f, 70f);
+
+                            for(int i = 0; i < tool.altModes.length; i++){
+                                int mode = i;
+                                String name = tool.altModes[i];
+
+                                table.addButton(b -> {
+                                    b.left();
+                                    b.marginLeft(6);
+                                    b.setStyle(Styles.clearTogglet);
+                                    b.add(Core.bundle.get("toolmode." + name)).left();
+                                    b.row();
+                                    b.add(Core.bundle.get("toolmode." + name + ".description")).color(Color.lightGray).left();
+                                }, () -> {
+                                    tool.mode = (tool.mode == mode ? -1 : mode);
+                                    table.remove();
+                                }).update(b -> b.setChecked(tool.mode == mode));
+                                table.row();
+                            }
+
+                            table.update(() -> {
+                                Vector2 v = button.localToStageCoordinates(Tmp.v1.setZero());
+                                table.setPosition(v.x, v.y, Align.topLeft);
+                                if(!isShown()){
+                                    table.remove();
+                                    lastTable[0] = null;
+                                }
+                            });
+
+                            table.pack();
+                            table.act(Core.graphics.getDeltaTime());
+
+                            addChild(table);
+                            lastTable[0] = table;
+                        });
+                    }
+
+
+                    Label mode = new Label("");
+                    mode.setColor(Pal.remove);
+                    mode.update(() -> mode.setText(tool.mode == -1 ? "" : "M" + (tool.mode + 1) + " "));
+                    mode.setAlignment(Align.bottomRight, Align.bottomRight);
+                    mode.touchable(Touchable.disabled);
+
+                    tools.stack(button, mode);
                 };
 
                 tools.defaults().size(size, size);
 
-                tools.addImageButton("icon-menu-large", "clear", 16 * 2f, menu::show);
+                tools.addImageButton(Icon.menuLargeSmall, Styles.cleari, menu::show);
 
-                ImageButton grid = tools.addImageButton("icon-grid", "clear-toggle", 16 * 2f, () -> view.setGrid(!view.isGrid())).get();
+                ImageButton grid = tools.addImageButton(Icon.gridSmall, Styles.clearTogglei, () -> view.setGrid(!view.isGrid())).get();
 
-                addTool.accept(EditorTool.zoom);
+                addTool.get(EditorTool.zoom);
 
                 tools.row();
 
-                ImageButton undo = tools.addImageButton("icon-undo", "clear", 16 * 2f, editor::undo).get();
-                ImageButton redo = tools.addImageButton("icon-redo", "clear", 16 * 2f, editor::redo).get();
+                ImageButton undo = tools.addImageButton(Icon.undoSmall, Styles.cleari, editor::undo).get();
+                ImageButton redo = tools.addImageButton(Icon.redoSmall, Styles.cleari, editor::redo).get();
 
-                addTool.accept(EditorTool.pick);
+                addTool.get(EditorTool.pick);
 
                 tools.row();
 
                 undo.setDisabled(() -> !editor.canUndo());
                 redo.setDisabled(() -> !editor.canRedo());
 
-                undo.update(() -> undo.getImage().setColor(undo.isDisabled() ? Color.GRAY : Color.WHITE));
-                redo.update(() -> redo.getImage().setColor(redo.isDisabled() ? Color.GRAY : Color.WHITE));
+                undo.update(() -> undo.getImage().setColor(undo.isDisabled() ? Color.gray : Color.white));
+                redo.update(() -> redo.getImage().setColor(redo.isDisabled() ? Color.gray : Color.white));
                 grid.update(() -> grid.setChecked(view.isGrid()));
 
-                addTool.accept(EditorTool.line);
-                addTool.accept(EditorTool.pencil);
-                addTool.accept(EditorTool.eraser);
+                addTool.get(EditorTool.line);
+                addTool.get(EditorTool.pencil);
+                addTool.get(EditorTool.eraser);
 
                 tools.row();
 
-                addTool.accept(EditorTool.fill);
-                addTool.accept(EditorTool.spray);
+                addTool.get(EditorTool.fill);
+                addTool.get(EditorTool.spray);
 
-                ImageButton rotate = tools.addImageButton("icon-arrow-16", "clear", 16 * 2f, () -> editor.rotation = (editor.rotation + 1) % 4).get();
+                ImageButton rotate = tools.addImageButton(Icon.arrow16Small, Styles.cleari, () -> editor.rotation = (editor.rotation + 1) % 4).get();
                 rotate.getImage().update(() -> {
                     rotate.getImage().setRotation(editor.rotation * 90);
                     rotate.getImage().setOrigin(Align.center);
@@ -422,7 +542,7 @@ public class MapEditorDialog extends Dialog implements Disposable{
 
                 tools.row();
 
-                tools.table("underline", t -> t.add("$editor.teams"))
+                tools.table(Tex.underline, t -> t.add("$editor.teams"))
                 .colspan(3).height(40).width(size * 3f + 3f).padBottom(3);
 
                 tools.row();
@@ -432,7 +552,7 @@ public class MapEditorDialog extends Dialog implements Disposable{
                 int i = 0;
 
                 for(Team team : Team.all){
-                    ImageButton button = new ImageButton("white", "clear-toggle-partial");
+                    ImageButton button = new ImageButton(Tex.whiteui, Styles.clearTogglePartiali);
                     button.margin(4f);
                     button.getImageCell().grow();
                     button.getStyle().imageUpColor = team.color;
@@ -448,9 +568,14 @@ public class MapEditorDialog extends Dialog implements Disposable{
 
                 mid.row();
 
-                mid.table("underline", t -> {
+                mid.table(Tex.underline, t -> {
                     Slider slider = new Slider(0, MapEditor.brushSizes.length - 1, 1, false);
                     slider.moved(f -> editor.brushSize = MapEditor.brushSizes[(int)(float)f]);
+                    for(int j = 0; j < MapEditor.brushSizes.length; j++){
+                        if(MapEditor.brushSizes[j] == editor.brushSize){
+                            slider.setValue(j);
+                        }
+                    }
 
                     t.top();
                     t.add("$editor.brush");
@@ -469,13 +594,24 @@ public class MapEditorDialog extends Dialog implements Disposable{
     }
 
     private void doInput(){
-        //tool select
-        for(int i = 0; i < EditorTool.values().length; i++){
-            if(Core.input.keyTap(KeyCode.valueOf("NUM_" + (i + 1)))){
-                view.setTool(EditorTool.values()[i]);
-                break;
+
+        if(Core.input.ctrl()){
+            //alt mode select
+            for(int i = 0; i < view.getTool().altModes.length + 1; i++){
+                if(Core.input.keyTap(KeyCode.valueOf("NUM_" + (i + 1)))){
+                    view.getTool().mode = i - 1;
+                }
+            }
+        }else{
+            //tool select
+            for(int i = 0; i < EditorTool.values().length; i++){
+                if(Core.input.keyTap(KeyCode.valueOf("NUM_" + (i + 1)))){
+                    view.setTool(EditorTool.values()[i]);
+                    break;
+                }
             }
         }
+
 
         if(Core.input.keyTap(KeyCode.ESCAPE)){
             if(!menu.isShown()){
@@ -495,6 +631,28 @@ public class MapEditorDialog extends Dialog implements Disposable{
         if(Core.input.ctrl()){
             if(Core.input.keyTap(KeyCode.Z)){
                 editor.undo();
+            }
+
+            //more undocumented features, fantastic
+            if(Core.input.keyTap(KeyCode.T)){
+
+                //clears all 'decoration' from the map
+                for(int x = 0; x < editor.width(); x++){
+                    for(int y = 0; y < editor.height(); y++){
+                        Tile tile = editor.tile(x, y);
+                        if(tile.block().breakable && tile.block() instanceof Rock){
+                            tile.setBlock(Blocks.air);
+                            editor.renderer().updatePoint(x, y);
+                        }
+
+                        if(tile.overlay() != Blocks.air && tile.overlay() != Blocks.spawn){
+                            tile.setOverlay(Blocks.air);
+                            editor.renderer().updatePoint(x, y);
+                        }
+                    }
+                }
+
+                editor.flushOp();
             }
 
             if(Core.input.keyTap(KeyCode.Y)){
@@ -524,6 +682,11 @@ public class MapEditorDialog extends Dialog implements Disposable{
         pane = new ScrollPane(content);
         pane.setFadeScrollBars(false);
         pane.setOverscroll(true, false);
+        pane.exited(() -> {
+            if(pane.hasScroll()){
+                Core.scene.setScrollFocus(view);
+            }
+        });
         ButtonGroup<ImageButton> group = new ButtonGroup<>();
 
         int i = 0;
@@ -541,11 +704,11 @@ public class MapEditorDialog extends Dialog implements Disposable{
         });
 
         for(Block block : blocksOut){
-            TextureRegion region = block.icon(Icon.medium);
+            TextureRegion region = block.icon(Cicon.medium);
 
             if(!Core.atlas.isFound(region)) continue;
 
-            ImageButton button = new ImageButton("white", "clear-toggle");
+            ImageButton button = new ImageButton(Tex.whiteui, Styles.clearTogglei);
             button.getStyle().imageUp = new TextureRegionDrawable(region);
             button.clicked(() -> editor.drawBlock = block);
             button.resizeImage(8 * 4f);
@@ -560,7 +723,7 @@ public class MapEditorDialog extends Dialog implements Disposable{
 
         group.getButtons().get(2).setChecked(true);
 
-        table.table("underline", extra -> extra.labelWrap(() -> editor.drawBlock.localizedName).width(200f).center()).growX();
+        table.table(Tex.underline, extra -> extra.labelWrap(() -> editor.drawBlock.localizedName).width(200f).center()).growX();
         table.row();
         table.add(pane).growY().fillX();
     }

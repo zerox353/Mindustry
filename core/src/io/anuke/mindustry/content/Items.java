@@ -1,7 +1,7 @@
 package io.anuke.mindustry.content;
 
 import io.anuke.arc.graphics.Color;
-import io.anuke.mindustry.game.ContentList;
+import io.anuke.mindustry.ctype.ContentList;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.ItemType;
 
@@ -39,7 +39,7 @@ public class Items implements ContentList{
         }};
 
         coal = new Item("coal", Color.valueOf("272727")){{
-            explosiveness = 0.4f;
+            explosiveness = 0.2f;
             flammability = 1f;
             hardness = 2;
         }};
@@ -85,7 +85,7 @@ public class Items implements ContentList{
         }};
 
         sporePod = new Item("spore-pod", Color.valueOf("7457ce")){{
-            flammability = 1.05f;
+            flammability = 1.15f;
         }};
 
         blastCompound = new Item("blast-compound", Color.valueOf("ff795e")){{

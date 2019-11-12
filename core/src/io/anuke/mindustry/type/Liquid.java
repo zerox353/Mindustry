@@ -1,16 +1,18 @@
 package io.anuke.mindustry.type;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.mindustry.content.StatusEffects;
-import io.anuke.mindustry.game.UnlockableContent;
-import io.anuke.mindustry.ui.ContentDisplay;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.ArcAnnotate.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.ctype.UnlockableContent;
+import io.anuke.mindustry.ui.*;
 
 public class Liquid extends UnlockableContent{
-    public final Color color;
+    public final @NonNull Color color;
 
+    /** Color used in bars. */
+    public @Nullable Color barColor;
     /** 0-1, 0 is completely inflammable, anything above that may catch fire when exposed to heat, 0.5+ is very flammable. */
     public float flammability;
     /** temperature: 0.5 is 'room' temperature, 0 is very cold, 1 is molten hot */
@@ -21,12 +23,8 @@ public class Liquid extends UnlockableContent{
     public float viscosity = 0.5f;
     /** how prone to exploding this liquid is, when heated. 0 = nothing, 1 = nuke */
     public float explosiveness;
-    /** the burning color of this liquid */
-    public Color flameColor = Color.valueOf("ffb763");
     /** The associated status effect. */
     public StatusEffect effect = StatusEffects.none;
-    /** Displayed icon. TODO fix it by removing autogen, draw icons manually */
-    public TextureRegion iconRegion;
 
     public Liquid(String name, Color color){
         super(name);
@@ -34,13 +32,17 @@ public class Liquid extends UnlockableContent{
         this.description = Core.bundle.getOrNull("liquid." + name + ".description");
     }
 
+    /** For modding only.*/
+    public Liquid(String name){
+        this(name, new Color(Color.black));
+    }
+
     public boolean canExtinguish(){
         return flammability < 0.1f && temperature <= 0.5f;
     }
 
-    @Override
-    public void load(){
-        iconRegion = Core.atlas.find("liquid-" + name);
+    public Color barColor(){
+        return barColor == null ? color : barColor;
     }
 
     @Override
@@ -51,11 +53,6 @@ public class Liquid extends UnlockableContent{
     @Override
     public String localizedName(){
         return Core.bundle.get("liquid." + this.name + ".name");
-    }
-
-    @Override
-    public TextureRegion getContentIcon(){
-        return iconRegion;
     }
 
     @Override

@@ -5,26 +5,26 @@ import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.input.KeyCode;
 import io.anuke.arc.scene.Element;
 import io.anuke.arc.scene.event.*;
-import io.anuke.arc.scene.ui.layout.Container;
-import io.anuke.arc.scene.ui.layout.Unit;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.mindustry.gen.*;
 
 import static io.anuke.mindustry.Vars.*;
 
-public class Minimap extends Container<Element>{
+public class Minimap extends Table{
 
     public Minimap(){
-        background("pane");
+        background(Tex.pane);
         float margin = 5f;
         touchable(Touchable.enabled);
 
-        addChild(new Element(){
+        add(new Element(){
             {
-                setSize(Unit.dp.scl(140f));
+                setSize(Scl.scl(140f));
             }
 
             @Override
             public void act(float delta){
-                setPosition(margin, margin);
+                setPosition(Scl.scl(margin), Scl.scl(margin));
 
                 super.act(delta);
             }
@@ -36,12 +36,11 @@ public class Minimap extends Container<Element>{
                 Draw.rect(renderer.minimap.getRegion(), x + width / 2f, y + height / 2f, width, height);
 
                 if(renderer.minimap.getTexture() != null){
-                    renderer.minimap.drawEntities(x, y, width, height);
+                    renderer.minimap.drawEntities(x, y, width, height, false);
                 }
             }
-        });
+        }).size(140f);
 
-        size(140f);
         margin(margin);
 
         addListener(new InputListener(){
@@ -54,7 +53,7 @@ public class Minimap extends Container<Element>{
 
         addListener(new ClickListener(){
             {
-                tapSquareSize = Unit.dp.scl(11f);
+                tapSquareSize = Scl.scl(11f);
             }
 
             @Override
@@ -92,8 +91,8 @@ public class Minimap extends Container<Element>{
 
             Element e = Core.scene.hit(Core.input.mouseX(), Core.input.mouseY(), true);
             if(e != null && e.isDescendantOf(this)){
-                Core.scene.setScrollFocus(this);
-            }else if(Core.scene.getScrollFocus() == this){
+                requestScroll();
+            }else if(hasScroll()){
                 Core.scene.setScrollFocus(null);
             }
         });

@@ -13,6 +13,11 @@ public class LiquidConverter extends GenericCrafter{
     }
 
     @Override
+    public boolean outputsItems(){
+        return false;
+    }
+
+    @Override
     public void init(){
         ConsumeLiquidBase cl = consumes.get(ConsumeType.liquid);
         cl.update(true);
@@ -37,6 +42,7 @@ public class LiquidConverter extends GenericCrafter{
             if(hasPower){
                 use *= entity.power.satisfaction; // Produce less liquid if power is not maxed
             }
+            useContent(tile, outputLiquid.liquid);
             entity.progress += use / cl.amount / craftTime;
             entity.liquids.add(outputLiquid.liquid, use);
             if(entity.progress >= 1f){

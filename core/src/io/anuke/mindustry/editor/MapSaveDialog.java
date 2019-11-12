@@ -1,30 +1,28 @@
 package io.anuke.mindustry.editor;
 
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.scene.ui.TextButton;
-import io.anuke.arc.scene.ui.TextField;
-import io.anuke.mindustry.core.Platform;
-import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.ui.dialogs.FloatingDialog;
+import io.anuke.arc.func.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.maps.*;
+import io.anuke.mindustry.ui.dialogs.*;
 
 import static io.anuke.mindustry.Vars.ui;
-import static io.anuke.mindustry.Vars.world;
 
 public class MapSaveDialog extends FloatingDialog{
     private TextField field;
-    private Consumer<String> listener;
+    private Cons<String> listener;
 
-    public MapSaveDialog(Consumer<String> cons){
+    public MapSaveDialog(Cons<String> cons){
         super("$editor.savemap");
         field = new TextField();
         listener = cons;
 
-        Platform.instance.addDialog(field);
+        Vars.platform.addDialog(field);
 
         shown(() -> {
             cont.clear();
             cont.label(() -> {
-                Map map = world.maps.byName(field.getText());
+                Map map = Vars.maps.byName(field.getText());
                 if(map != null){
                     if(map.custom){
                         return "$editor.overwrite";
@@ -45,7 +43,7 @@ public class MapSaveDialog extends FloatingDialog{
         TextButton button = new TextButton("$save");
         button.clicked(() -> {
             if(!invalid()){
-                cons.accept(field.getText());
+                cons.get(field.getText());
                 hide();
             }
         });
@@ -55,9 +53,9 @@ public class MapSaveDialog extends FloatingDialog{
 
     public void save(){
         if(!invalid()){
-            listener.accept(field.getText());
+            listener.get(field.getText());
         }else{
-            ui.showError("$editor.failoverwrite");
+            ui.showErrorMessage("$editor.failoverwrite");
         }
     }
 
@@ -69,7 +67,7 @@ public class MapSaveDialog extends FloatingDialog{
         if(field.getText().isEmpty()){
             return true;
         }
-        Map map = world.maps.byName(field.getText());
+        Map map = Vars.maps.byName(field.getText());
         return map != null && !map.custom;
     }
 }

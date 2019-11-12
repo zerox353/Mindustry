@@ -2,6 +2,8 @@ package io.anuke.mindustry.editor;
 
 import io.anuke.arc.collection.StringMap;
 import io.anuke.arc.files.FileHandle;
+import io.anuke.arc.func.Cons;
+import io.anuke.arc.func.Boolf;
 import io.anuke.arc.graphics.Pixmap;
 import io.anuke.arc.math.Mathf;
 import io.anuke.arc.util.Structs;
@@ -13,9 +15,8 @@ import io.anuke.mindustry.io.MapIO;
 import io.anuke.mindustry.maps.Map;
 import io.anuke.mindustry.world.*;
 import io.anuke.mindustry.world.blocks.BlockPart;
-import io.anuke.mindustry.world.blocks.Floor;
 
-import static io.anuke.mindustry.Vars.world;
+import static io.anuke.mindustry.Vars.*;
 
 public class MapEditor{
     public static final int[] brushSizes = {1, 2, 3, 4, 5, 9, 15, 20};
@@ -31,7 +32,7 @@ public class MapEditor{
     public int brushSize = 1;
     public int rotation;
     public Block drawBlock = Blocks.stone;
-    public Team drawTeam = Team.blue;
+    public Team drawTeam = Team.sharded;
 
     public StringMap getTags(){
         return tags;
@@ -51,6 +52,9 @@ public class MapEditor{
 
         loading = true;
         tags.putAll(map.tags);
+        if(map.file.parent().parent().name().equals("1127400") && steam){
+            tags.put("steamid",  map.file.parent().name());
+        }
         MapIO.loadMap(map, context);
         checkLinkedTiles();
         renderer.resize(width(), height());
@@ -132,18 +136,19 @@ public class MapEditor{
         return world.height();
     }
 
-    public void draw(int x, int y, boolean paint){
-        draw(x, y, paint, drawBlock);
+    public void drawBlocksReplace(int x, int y){
+        drawBlocks(x, y, tile -> tile.block() != Blocks.air || drawBlock.isFloor());
     }
 
-    public void draw(int x, int y, boolean paint, Block drawBlock){
-        draw(x, y, paint, drawBlock, 1.0);
+    public void drawBlocks(int x, int y){
+        drawBlocks(x, y, false, tile -> true);
     }
 
-    public void draw(int x, int y, boolean paint, Block drawBlock, double chance){
-        boolean isfloor = drawBlock instanceof Floor && drawBlock != Blocks.air;
-        Tile[][] tiles = world.getTiles();
+    public void drawBlocks(int x, int y, Boolf<Tile> tester){
+        drawBlocks(x, y, false, tester);
+    }
 
+    public void drawBlocks(int x, int y, boolean square, Boolf<Tile> tester){
         if(drawBlock.isMultiblock()){
             x = Mathf.clamp(x, (drawBlock.size - 1) / 2, width() - drawBlock.size / 2 - 1);
             y = Mathf.clamp(y, (drawBlock.size - 1) / 2, height() - drawBlock.size / 2 - 1);
@@ -157,7 +162,7 @@ public class MapEditor{
                     int worldy = dy + offsety + y;
 
                     if(Structs.inBounds(worldx, worldy, width(), height())){
-                        Tile tile = tiles[worldx][worldy];
+                        Tile tile = tile(worldx, worldy);
 
                         Block block = tile.block();
 
@@ -171,36 +176,65 @@ public class MapEditor{
                 }
             }
 
-            world.setBlock(tiles[x][y], drawBlock, drawTeam);
+            world.setBlock(tile(x, y), drawBlock, drawTeam);
         }else{
-            for(int rx = -brushSize; rx <= brushSize; rx++){
-                for(int ry = -brushSize; ry <= brushSize; ry++){
-                    if(Mathf.dst(rx, ry) <= brushSize - 0.5f && (chance >= 0.999 || Mathf.chance(chance))){
-                        int wx = x + rx, wy = y + ry;
+            boolean isFloor = drawBlock.isFloor() && drawBlock != Blocks.air;
 
-                        if(wx < 0 || wy < 0 || wx >= width() || wy >= height() || (paint && !isfloor && tiles[wx][wy].block() == Blocks.air)){
-                            continue;
-                        }
+            Cons<Tile> drawer = tile -> {
+                if(!tester.get(tile)) return;
 
-                        Tile tile = tiles[wx][wy];
+                //remove linked tiles blocking the way
+                if(!isFloor && (tile.isLinked() || tile.block().isMultiblock())){
+                    world.removeBlock(tile.link());
+                }
 
-                        if(!isfloor && (tile.isLinked() || tile.block().isMultiblock())){
-                            world.removeBlock(tile.link());
-                        }
-
-                        if(isfloor){
-                            tile.setFloor((Floor)drawBlock);
-                        }else{
-                            tile.setBlock(drawBlock);
-                            if(drawBlock.synthetic()){
-                                tile.setTeam(drawTeam);
-                            }
-                            if(drawBlock.rotate){
-                                tile.rotation((byte)rotation);
-                            }
-                        }
+                if(isFloor){
+                    tile.setFloor(drawBlock.asFloor());
+                }else{
+                    tile.setBlock(drawBlock);
+                    if(drawBlock.synthetic()){
+                        tile.setTeam(drawTeam);
+                    }
+                    if(drawBlock.rotate){
+                        tile.rotation((byte)rotation);
                     }
                 }
+            };
+
+            if(square){
+                drawSquare(x, y, drawer);
+            }else{
+                drawCircle(x, y, drawer);
+            }
+        }
+    }
+
+    public void drawCircle(int x, int y, Cons<Tile> drawer){
+        for(int rx = -brushSize; rx <= brushSize; rx++){
+            for(int ry = -brushSize; ry <= brushSize; ry++){
+                if(Mathf.dst2(rx, ry) <= (brushSize - 0.5f) * (brushSize - 0.5f)){
+                    int wx = x + rx, wy = y + ry;
+
+                    if(wx < 0 || wy < 0 || wx >= width() || wy >= height()){
+                        continue;
+                    }
+
+                    drawer.get(tile(wx, wy));
+                }
+            }
+        }
+    }
+
+    public void drawSquare(int x, int y, Cons<Tile> drawer){
+        for(int rx = -brushSize; rx <= brushSize; rx++){
+            for(int ry = -brushSize; ry <= brushSize; ry++){
+                int wx = x + rx, wy = y + ry;
+
+                if(wx < 0 || wy < 0 || wx >= width() || wy >= height()){
+                    continue;
+                }
+
+                drawer.get(tile(wx, wy));
             }
         }
     }
@@ -240,13 +274,13 @@ public class MapEditor{
 
     public void undo(){
         if(stack.canUndo()){
-            stack.undo(this);
+            stack.undo();
         }
     }
 
     public void redo(){
         if(stack.canRedo()){
-            stack.redo(this);
+            stack.redo();
         }
     }
 
@@ -267,7 +301,7 @@ public class MapEditor{
     public void addTileOp(long data){
         if(loading) return;
 
-        if(currentOp == null) currentOp = new DrawOperation();
+        if(currentOp == null) currentOp = new DrawOperation(this);
         currentOp.addOperation(data);
 
         renderer.updatePoint(TileOp.x(data), TileOp.y(data));

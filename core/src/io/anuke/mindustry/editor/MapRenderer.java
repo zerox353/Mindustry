@@ -1,6 +1,6 @@
 package io.anuke.mindustry.editor;
 
-import io.anuke.arc.Core;
+import io.anuke.arc.*;
 import io.anuke.arc.collection.IntSet;
 import io.anuke.arc.collection.IntSet.IntSetIterator;
 import io.anuke.arc.graphics.Color;
@@ -8,8 +8,9 @@ import io.anuke.arc.graphics.Texture;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Disposable;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.content.Blocks;
+import io.anuke.mindustry.game.EventType.*;
 import io.anuke.mindustry.game.Team;
 import io.anuke.mindustry.graphics.IndexedRenderer;
 import io.anuke.mindustry.world.Block;
@@ -19,7 +20,7 @@ import io.anuke.mindustry.world.blocks.BlockPart;
 import static io.anuke.mindustry.Vars.tilesize;
 
 public class MapRenderer implements Disposable{
-    private static final int chunksize = 64;
+    private static final int chunkSize = 64;
     private IndexedRenderer[][] chunks;
     private IntSet updates = new IntSet();
     private IntSet delayedUpdates = new IntSet();
@@ -29,7 +30,11 @@ public class MapRenderer implements Disposable{
 
     public MapRenderer(MapEditor editor){
         this.editor = editor;
-        texture = Core.atlas.find("clear-editor").getTexture();
+        this.texture = Core.atlas.find("clear-editor").getTexture();
+
+        Events.on(ContentReloadEvent.class, e -> {
+            texture = Core.atlas.find("clear-editor").getTexture();
+        });
     }
 
     public void resize(int width, int height){
@@ -41,11 +46,11 @@ public class MapRenderer implements Disposable{
             }
         }
 
-        chunks = new IndexedRenderer[(int)Math.ceil((float)width / chunksize)][(int)Math.ceil((float)height / chunksize)];
+        chunks = new IndexedRenderer[(int)Math.ceil((float)width / chunkSize)][(int)Math.ceil((float)height / chunkSize)];
 
         for(int x = 0; x < chunks.length; x++){
             for(int y = 0; y < chunks[0].length; y++){
-                chunks[x][y] = new IndexedRenderer(chunksize * chunksize * 2);
+                chunks[x][y] = new IndexedRenderer(chunkSize * chunkSize * 2);
             }
         }
         this.width = width;
@@ -67,6 +72,11 @@ public class MapRenderer implements Disposable{
 
         updates.addAll(delayedUpdates);
         delayedUpdates.clear();
+
+        //????
+        if(chunks == null){
+            return;
+        }
 
         for(int x = 0; x < chunks.length; x++){
             for(int y = 0; y < chunks[0].length; y++){
@@ -97,7 +107,7 @@ public class MapRenderer implements Disposable{
     }
 
     private void render(int wx, int wy){
-        int x = wx / chunksize, y = wy / chunksize;
+        int x = wx / chunkSize, y = wy / chunkSize;
         IndexedRenderer mesh = chunks[x][y];
         Tile tile = editor.tiles()[wx][wy];
 
@@ -107,8 +117,8 @@ public class MapRenderer implements Disposable{
 
         TextureRegion region;
 
-        int idxWall = (wx % chunksize) + (wy % chunksize) * chunksize;
-        int idxDecal = (wx % chunksize) + (wy % chunksize) * chunksize + chunksize * chunksize;
+        int idxWall = (wx % chunkSize) + (wy % chunkSize) * chunkSize;
+        int idxDecal = (wx % chunkSize) + (wy % chunkSize) * chunkSize + chunkSize * chunkSize;
 
         if(wall != Blocks.air && (wall.synthetic() || wall instanceof BlockPart)){
             region = !Core.atlas.isFound(wall.editorIcon()) ? Core.atlas.find("clear-editor") : wall.editorIcon();
@@ -118,10 +128,12 @@ public class MapRenderer implements Disposable{
                 wx * tilesize + wall.offset(), wy * tilesize + wall.offset(),
                 region.getWidth() * Draw.scl, region.getHeight() * Draw.scl, tile.rotation() * 90 - 90);
             }else{
+                float width = region.getWidth() * Draw.scl, height = region.getHeight() * Draw.scl;
+
                 mesh.draw(idxWall, region,
-                wx * tilesize + wall.offset() + (tilesize - region.getWidth() * Draw.scl) / 2f,
-                wy * tilesize + wall.offset() + (tilesize - region.getHeight() * Draw.scl) / 2f,
-                region.getWidth() * Draw.scl, region.getHeight() * Draw.scl);
+                wx * tilesize + wall.offset() + (tilesize - width) / 2f,
+                wy * tilesize + wall.offset() + (tilesize - height) / 2f,
+                width, height);
             }
         }else{
             region = floor.editorVariantRegions()[Mathf.randomSeed(idxWall, 0, floor.editorVariantRegions().length - 1)];
@@ -144,10 +156,16 @@ public class MapRenderer implements Disposable{
             region = Core.atlas.find("clear-editor");
         }
 
-        mesh.draw(idxDecal, region,
-        wx * tilesize + offsetX, wy * tilesize + offsetY,
-        region.getWidth() * Draw.scl, region.getHeight() * Draw.scl);
-        mesh.setColor(Color.WHITE);
+        float width = region.getWidth() * Draw.scl, height = region.getHeight() * Draw.scl;
+        if(!wall.synthetic() && wall != Blocks.air && !wall.isMultiblock()){
+            offsetX = 0;
+            offsetY = 0;
+            width = tilesize;
+            height = tilesize;
+        }
+
+        mesh.draw(idxDecal, region, wx * tilesize + offsetX, wy * tilesize + offsetY, width, height);
+        mesh.setColor(Color.white);
     }
 
     @Override

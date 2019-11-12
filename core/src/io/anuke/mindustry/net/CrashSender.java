@@ -1,38 +1,38 @@
 package io.anuke.mindustry.net;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.ObjectMap;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.OS;
-import io.anuke.arc.util.Strings;
-import io.anuke.arc.util.io.PropertiesUtils;
-import io.anuke.arc.util.serialization.JsonValue;
-import io.anuke.arc.util.serialization.JsonValue.ValueType;
-import io.anuke.arc.util.serialization.JsonWriter.OutputType;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.game.Version;
+import io.anuke.arc.*;
+import io.anuke.arc.Net.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.func.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.io.*;
+import io.anuke.arc.util.serialization.*;
+import io.anuke.arc.util.serialization.JsonValue.*;
+import io.anuke.arc.util.serialization.JsonWriter.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.core.*;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
+import java.text.*;
+import java.util.*;
+
+import static io.anuke.mindustry.Vars.net;
 
 public class CrashSender{
 
-    public static void send(Throwable exception, Consumer<File> writeListener){
+    public static void send(Throwable exception, Cons<File> writeListener){
         try{
             exception.printStackTrace();
 
-            //don't create crash logs for me (anuke) or custom builds, as it's expected
-            if(System.getProperty("user.name").equals("anuke") || Version.build == -1) return;
+            //don't create crash logs for custom builds, as it's expected
+            if(Version.build == -1 || (System.getProperty("user.name").equals("anuke") && "release".equals(Version.modifier))) return;
 
             //attempt to load version regardless
             if(Version.number == 0){
                 try{
                     ObjectMap<String, String> map = new ObjectMap<>();
-                    PropertiesUtils.load(map, new InputStreamReader(CrashSender.class.getResourceAsStream("version.properties")));
+                    PropertiesUtils.load(map, new InputStreamReader(CrashSender.class.getResourceAsStream("/version.properties")));
 
                     Version.type = map.get("type");
                     Version.number = Integer.parseInt(map.get("number"));
@@ -45,8 +45,19 @@ public class CrashSender{
                         Version.build = Strings.canParseInt(map.get("build")) ? Integer.parseInt(map.get("build")) : -1;
                     }
                 }catch(Throwable ignored){
+                    ignored.printStackTrace();
                     Log.err("Failed to parse version.");
                 }
+            }
+
+            try{
+                File file = new File(OS.getAppDataDirectoryString(Vars.appName), "crashes/crash-report-" + new SimpleDateFormat("MM_dd_yyyy_HH_mm_ss").format(new Date()) + ".txt");
+                new FileHandle(OS.getAppDataDirectoryString(Vars.appName)).child("crashes").mkdirs();
+                new FileHandle(file).writeString(parseException(exception));
+                writeListener.get(file);
+            }catch(Throwable e){
+                e.printStackTrace();
+                Log.err("Failed to save local crash report.");
             }
 
             try{
@@ -63,24 +74,13 @@ public class CrashSender{
                 return;
             }
 
-            try{
-                File file = new File(OS.getAppDataDirectoryString(Vars.appName), "crashes/crash-report-" + DateTimeFormatter.ofPattern("MM_dd_yyyy_HH_mm_ss").format(LocalDateTime.now()) + ".txt");
-                new File(OS.getAppDataDirectoryString(Vars.appName)).mkdir();
-                new BufferedOutputStream(new FileOutputStream(file), 2048).write(parseException(exception).getBytes());
-                Files.createDirectories(Paths.get(OS.getAppDataDirectoryString(Vars.appName), "crashes"));
-
-                writeListener.accept(file);
-            }catch(Throwable ignored){
-                Log.err("Failed to save local crash report.");
-            }
-
             boolean netActive = false, netServer = false;
 
             //attempt to close connections, if applicable
             try{
-                netActive = Net.active();
-                netServer = Net.server();
-                Net.dispose();
+                netActive = net.active();
+                netServer = net.server();
+                net.dispose();
             }catch(Throwable ignored){
             }
 
@@ -93,32 +93,45 @@ public class CrashSender{
             ex(() -> value.addChild("versionNumber", new JsonValue(Version.number)));
             ex(() -> value.addChild("versionModifier", new JsonValue(Version.modifier)));
             ex(() -> value.addChild("build", new JsonValue(Version.build)));
+            ex(() -> value.addChild("revision", new JsonValue(Version.revision)));
             ex(() -> value.addChild("net", new JsonValue(fn)));
             ex(() -> value.addChild("server", new JsonValue(fs)));
             ex(() -> value.addChild("players", new JsonValue(Vars.playerGroup.size())));
             ex(() -> value.addChild("state", new JsonValue(Vars.state.getState().name())));
-            ex(() -> value.addChild("os", new JsonValue(System.getProperty("os.name"))));
+            ex(() -> value.addChild("os", new JsonValue(System.getProperty("os.name") + "x" + (OS.is64Bit ? "64" : "32"))));
             ex(() -> value.addChild("trace", new JsonValue(parseException(exception))));
+            ex(() -> value.addChild("javaVersion", new JsonValue(System.getProperty("java.version"))));
+            ex(() -> value.addChild("javaArch", new JsonValue(System.getProperty("sun.arch.data.model"))));
+
+            boolean[] sent = {false};
 
             Log.info("Sending crash report.");
             //post to crash report URL
-            Net.http(Vars.crashReportURL, "POST", value.toJson(OutputType.json), r -> {
+            httpPost(Vars.crashReportURL, value.toJson(OutputType.json), r -> {
                 Log.info("Crash sent successfully.");
+                sent[0] = true;
                 System.exit(1);
             }, t -> {
                 t.printStackTrace();
+                sent[0] = true;
                 System.exit(1);
             });
 
-            //sleep for 10 seconds or until crash report is sent
+            //sleep until report is sent
             try{
-                Thread.sleep(10000);
+                while(!sent[0]){
+                    Thread.sleep(30);
+                }
             }catch(InterruptedException ignored){
             }
         }catch(Throwable death){
             death.printStackTrace();
             System.exit(1);
         }
+    }
+
+    private static void httpPost(String url, String content, Cons<HttpResponse> success, Cons<Throwable> failure){
+        new NetJavaImpl().http(new HttpRequest().method(HttpMethod.POST).content(content).url(url), success, failure);
     }
 
     private static String parseException(Throwable e){
@@ -131,8 +144,7 @@ public class CrashSender{
     private static void ex(Runnable r){
         try{
             r.run();
-        }catch(Throwable t){
-            t.printStackTrace();
+        }catch(Throwable ignored){
         }
     }
 }

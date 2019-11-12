@@ -1,24 +1,22 @@
 package io.anuke.mindustry;
 
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Log;
-import io.anuke.arc.util.noise.RidgedPerlin;
-import io.anuke.mindustry.ImagePacker.GenRegion;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.noise.*;
+import io.anuke.mindustry.ImagePacker.*;
+import io.anuke.mindustry.ctype.*;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Block.Icon;
-import io.anuke.mindustry.world.blocks.Floor;
-import io.anuke.mindustry.world.blocks.OreBlock;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.*;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
+import java.io.*;
+import java.nio.file.*;
 
-import static io.anuke.mindustry.Vars.content;
-import static io.anuke.mindustry.Vars.tilesize;
+import static io.anuke.mindustry.Vars.*;
 
 public class Generators{
 
@@ -37,7 +35,7 @@ public class Generators{
                         for(int y = 0; y < dim; y++){
                             float dst = Mathf.dst((float)x/dim, (float)y/dim, 0.5f, 0.5f) * 2f;
                             if(dst < 1.2f && r.getValue(x, y, 1f / 40f) - dst*(1f-fract) > 0.16f){
-                                image.draw(x, y, Color.WHITE);
+                                image.draw(x, y, Color.white);
                             }
                         }
                     }
@@ -60,7 +58,7 @@ public class Generators{
                                     }
                                 }
                             }
-                            output.draw(x, y, whites >= clears ? Color.WHITE : Color.CLEAR);
+                            output.draw(x, y, whites >= clears ? Color.white : Color.clear);
                         }
                     }
 
@@ -71,7 +69,6 @@ public class Generators{
 
         ImagePacker.generate("block-icons", () -> {
             Image colors = new Image(content.blocks().size, 1);
-            Color outlineColor = new Color(0, 0, 0, 0.3f);
 
             for(Block block : content.blocks()){
                 TextureRegion[] regions = block.getGeneratedIcons();
@@ -96,7 +93,7 @@ public class Generators{
                 try{
                     Image last = null;
                     if(block.outlineIcon){
-                        int radius = 3;
+                        int radius = 4;
                         GenRegion region = (GenRegion)regions[regions.length - 1];
                         Image base = ImagePacker.get(region);
                         Image out = last = new Image(region.getWidth(), region.getHeight());
@@ -117,7 +114,7 @@ public class Generators{
                                         }
                                     }
                                     if(found){
-                                        out.draw(x, y, outlineColor);
+                                        out.draw(x, y, block.outlineColor);
                                     }
                                 }
                             }
@@ -144,17 +141,14 @@ public class Generators{
                         }
                     }
 
-                    if(regions.length > 1){
-                        image.save(block.name + "-icon-full");
-                    }
+                    image.save("block-" + block.name + "-full");
 
                     image.save("../editor/" + block.name + "-icon-editor");
 
-                    for(Icon icon : Icon.values()){
-                        if(icon.size == 0 || (icon.size == image.width && icon.size == image.height)) continue;
+                    for(Cicon icon : Cicon.scaled){
                         Image scaled = new Image(icon.size, icon.size);
                         scaled.drawScaled(image);
-                        scaled.save(block.name + "-icon-" + icon.name());
+                        scaled.save("../ui/block-" + block.name + "-" + icon.name());
                     }
 
                     Color average = new Color();
@@ -185,13 +179,13 @@ public class Generators{
         });
 
         ImagePacker.generate("item-icons", () -> {
-            for(Item item : content.items()){
-                Image base = ImagePacker.get("item-" + item.name);
-                for(Item.Icon icon : Item.Icon.values()){
-                    if(icon.size == base.width) continue;
+            for(UnlockableContent item : (Array<? extends UnlockableContent>)(Array)Array.withArrays(content.items(), content.liquids())){
+                Image base = ImagePacker.get(item.getContentType().name() + "-" + item.name);
+                for(Cicon icon : Cicon.scaled){
+                    //if(icon.size == base.width) continue;
                     Image image = new Image(icon.size, icon.size);
                     image.drawScaled(base);
-                    image.save("item-" + item.name + "-" + icon.name(), false);
+                    image.save(item.getContentType().name() + "-" + item.name + "-" + icon.name(), false);
                 }
             }
         });
@@ -212,16 +206,16 @@ public class Generators{
 
                 int off = image.width / 2 - mech.weapon.region.getWidth() / 2;
 
-                image.draw(mech.weapon.region, -(int)mech.weaponOffsetX + off, (int)mech.weaponOffsetY + off, false, false);
-                image.draw(mech.weapon.region, (int)mech.weaponOffsetX + off, (int)mech.weaponOffsetY + off, true, false);
+                for(int i : Mathf.signs){
+                    image.draw(mech.weapon.region, i * (int)mech.weaponOffsetX*4 + off, -(int)mech.weaponOffsetY*4 + off, i > 0, false);
+                }
 
-
-                image.save("mech-icon-" + mech.name);
+                image.save("mech-" + mech.name + "-full");
             }
         });
 
         ImagePacker.generate("unit-icons", () -> {
-            content.<UnitType>getBy(ContentType.unit).each(type -> !type.isFlying, type -> {
+            content.<UnitType>getBy(ContentType.unit).each(type -> !type.flying, type -> {
                 type.load();
                 type.weapon.load();
 
@@ -239,7 +233,7 @@ public class Generators{
                     b, false);
                 }
 
-                image.save("unit-icon-" + type.name);
+                image.save("unit-" + type.name + "-full");
             });
         });
 
@@ -252,7 +246,7 @@ public class Generators{
                     Image image = new Image(32, 32);
                     Image shadow = ImagePacker.get(item.name + (i + 1));
 
-                    int offset = image.width / tilesize;
+                    int offset = image.width / tilesize - 1;
 
                     for(int x = 0; x < image.width; x++){
                         for(int y = offset; y < image.height; y++){
@@ -271,19 +265,18 @@ public class Generators{
                     image.save("../editor/editor-ore-" + item.name + (i + 1));
 
                     //save icons
-                    image.save(ore.name + "-icon-full");
-                    for(Icon icon : Icon.values()){
-                        if(icon.size == 0) continue;
+                    image.save("block-" + ore.name + "-full");
+                    for(Cicon icon : Cicon.scaled){
                         Image scaled = new Image(icon.size, icon.size);
                         scaled.drawScaled(image);
-                        scaled.save(ore.name + "-icon-" + icon.name());
+                        scaled.save("block-" + ore.name + "-" + icon.name());
                     }
                 }
             });
         });
 
         ImagePacker.generate("edges", () -> {
-            content.blocks().<Floor>each(b -> b instanceof Floor, floor -> {
+            content.blocks().<Floor>each(b -> b instanceof Floor && !(b instanceof OverlayFloor), floor -> {
 
                 if(ImagePacker.has(floor.name + "-edge") || floor.blendGroup != floor){
                     return;

@@ -1,33 +1,30 @@
 package io.anuke.mindustry.input;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.function.BooleanProvider;
-import io.anuke.arc.graphics.Color;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.func.*;
 import io.anuke.arc.graphics.g2d.*;
-import io.anuke.arc.input.GestureDetector;
-import io.anuke.arc.input.GestureDetector.GestureListener;
-import io.anuke.arc.input.KeyCode;
-import io.anuke.arc.math.Interpolation;
-import io.anuke.arc.math.Mathf;
+import io.anuke.arc.input.GestureDetector.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.math.*;
 import io.anuke.arc.math.geom.*;
-import io.anuke.arc.scene.actions.Actions;
-import io.anuke.arc.scene.event.Touchable;
-import io.anuke.arc.scene.ui.layout.Table;
+import io.anuke.arc.scene.*;
+import io.anuke.arc.scene.ui.ImageButton.*;
+import io.anuke.arc.scene.ui.layout.*;
 import io.anuke.arc.util.*;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Units;
-import io.anuke.mindustry.entities.traits.TargetTrait;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.entities.type.Unit;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.input.PlaceUtils.NormalizeDrawResult;
-import io.anuke.mindustry.input.PlaceUtils.NormalizeResult;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.traits.BuilderTrait.*;
+import io.anuke.mindustry.entities.traits.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.world.*;
 
 import static io.anuke.mindustry.Vars.*;
 import static io.anuke.mindustry.input.PlaceMode.*;
@@ -35,18 +32,15 @@ import static io.anuke.mindustry.input.PlaceMode.*;
 public class MobileInput extends InputHandler implements GestureListener{
     /** Maximum speed the player can pan. */
     private static final float maxPanSpeed = 1.3f;
-    private static Rectangle r1 = new Rectangle(), r2 = new Rectangle();
     /** Distance to edge of screen to start panning. */
-    private final float edgePan = io.anuke.arc.scene.ui.layout.Unit.dp.scl(60f);
+    private final float edgePan = Scl.scl(60f);
 
     //gesture data
     private Vector2 vector = new Vector2();
-    private float lastDistance = -1f;
-    /** Set of completed guides. */
-    //private ObjectSet<String> guides = new ObjectSet<>();
+    private float lastZoom = -1;
 
     /** Position where the player started dragging a line. */
-    private int lineStartX, lineStartY;
+    private int lineStartX, lineStartY, lastLineX, lastLineY;
 
     /** Animation scale for line. */
     private float lineScale;
@@ -56,26 +50,20 @@ public class MobileInput extends InputHandler implements GestureListener{
     /** Used for shifting build requests. */
     private float shiftDeltaX, shiftDeltaY;
 
-    /** List of currently selected tiles to place. */
-    private Array<PlaceRequest> selection = new Array<>();
     /** Place requests to be removed. */
-    private Array<PlaceRequest> removals = new Array<>();
+    private Array<BuildRequest> removals = new Array<>();
     /** Whether or not the player is currently shifting all placed tiles. */
     private boolean selecting;
     /** Whether the player is currently in line-place mode. */
-    private boolean lineMode;
+    private boolean lineMode, schematicMode;
     /** Current place mode. */
     private PlaceMode mode = none;
     /** Whether no recipe was available when switching to break mode. */
     private Block lastBlock;
     /** Last placed request. Used for drawing block overlay. */
-    private PlaceRequest lastPlaced;
-
-    private int prevX, prevY, prevRotation;
-
-    public MobileInput(){
-        Core.input.addProcessor(new GestureDetector(20, 0.5f, 0.4f, 0.15f, this));
-    }
+    private BuildRequest lastPlaced;
+    /** Down tracking for panning.*/
+    private boolean down = false;
 
     //region utility methods
 
@@ -110,10 +98,23 @@ public class MobileInput extends InputHandler implements GestureListener{
         r2.setSize(block.size * tilesize);
         r2.setCenter(x * tilesize + block.offset(), y * tilesize + block.offset());
 
-        for(PlaceRequest req : selection){
+        for(BuildRequest req : selectRequests){
             Tile other = req.tile();
 
-            if(other == null || req.remove) continue;
+            if(other == null || req.breaking) continue;
+
+            r1.setSize(req.block.size * tilesize);
+            r1.setCenter(other.worldx() + req.block.offset(), other.worldy() + req.block.offset());
+
+            if(r2.overlaps(r1)){
+                return true;
+            }
+        }
+
+        for(BuildRequest req : player.buildQueue()){
+            Tile other = world.tile(req.x, req.y);
+
+            if(other == null || req.breaking) continue;
 
             r1.setSize(req.block.size * tilesize);
             r1.setCenter(other.worldx() + req.block.offset(), other.worldy() + req.block.offset());
@@ -126,16 +127,16 @@ public class MobileInput extends InputHandler implements GestureListener{
     }
 
     /** Returns the selection request that overlaps this tile, or null. */
-    PlaceRequest getRequest(Tile tile){
+    BuildRequest getRequest(Tile tile){
         r2.setSize(tilesize);
         r2.setCenter(tile.worldx(), tile.worldy());
 
-        for(PlaceRequest req : selection){
+        for(BuildRequest req : selectRequests){
             Tile other = req.tile();
 
             if(other == null) continue;
 
-            if(!req.remove){
+            if(!req.breaking){
                 r1.setSize(req.block.size * tilesize);
                 r1.setCenter(other.worldx() + req.block.offset(), other.worldy() + req.block.offset());
 
@@ -143,7 +144,6 @@ public class MobileInput extends InputHandler implements GestureListener{
                     return req;
                 }
             }else{
-
                 r1.setSize(other.block().size * tilesize);
                 r1.setCenter(other.worldx() + other.block().offset(), other.worldy() + other.block().offset());
 
@@ -155,26 +155,10 @@ public class MobileInput extends InputHandler implements GestureListener{
         return null;
     }
 
-    void removeRequest(PlaceRequest request){
-        selection.removeValue(request, true);
-        removals.add(request);
-    }
-
-    void showGuide(String type, BooleanProvider done){
-        if(!Core.settings.getBool(type, false)){
-            Core.scene.table("guideDim", t -> {
-                t.margin(10f);
-                t.touchable(Touchable.disabled);
-                t.top().table("button", s -> s.add("$" + type).growX().wrap().labelAlign(Align.center, Align.center)).growX();
-                t.update(() -> {
-                    if((done.get() || state.is(State.menu)) && t.getUserObject() == null){
-                        t.actions(Actions.delay(1f), Actions.fadeOut(1f, Interpolation.fade), Actions.remove());
-                        t.setUserObject("ha");
-                    }
-                });
-            });
-            Core.settings.put(type, true);
-            data.modified();
+    void removeRequest(BuildRequest request){
+        selectRequests.removeValue(request, true);
+        if(!request.breaking){
+            removals.add(request);
         }
     }
 
@@ -189,115 +173,67 @@ public class MobileInput extends InputHandler implements GestureListener{
     //endregion
     //region UI and drawing
 
-    void drawRequest(PlaceRequest request, PlaceRequest prev){
-        Tile tile = request.tile();
-
-        if(!request.remove){
-            if(prev != null){
-                request.block.getPlaceDraw(placeDraw, request.rotation, prev.x - request.x, prev.y - request.y, prev.rotation);
-            }else{
-                request.block.getPlaceDraw(placeDraw, request.rotation, 0, 0, request.rotation);
-            }
-
-            //draw placing request
-            float offset = request.block.offset();
-            TextureRegion region = placeDraw.region;
-
-            Draw.mixcol(Pal.accent, Mathf.clamp((1f - request.scale) / 0.5f));
-            Draw.tint(Color.WHITE, Pal.breakInvalid, request.redness);
-
-            Draw.rect(region, tile.worldx() + offset, tile.worldy() + offset,
-            region.getWidth() * request.scale * Draw.scl * placeDraw.scalex,
-            region.getHeight() * request.scale * Draw.scl * placeDraw.scaley,
-            request.block.rotate ? placeDraw.rotation * 90 : 0);
-
-            Draw.mixcol(Pal.accent, 1f);
-            for(int i = 0; i < 4; i++){
-                Point2 p = Geometry.d8edge[i];
-                float poffset = -Math.max(request.block.size - 1, 0) / 2f * tilesize;
-                TextureRegion find = Core.atlas.find("block-select");
-                if(i % 2 == 0)
-                    Draw.rect("block-select", request.tile().x * tilesize + request.block.offset() + poffset * p.x, request.tile().y * tilesize + request.block.offset() + poffset * p.y,
-                    find.getWidth() * Draw.scl * request.scale, find.getHeight() * Draw.scl * request.scale, i * 90);
-            }
-            Draw.color();
-        }else{
-            float rad = Math.max((tile.block().size * tilesize / 2f - 1) * request.scale, 1f);
-
-            if(rad <= 1.01f) return;
-            Draw.mixcol();
-            //draw removing request
-            Draw.tint(Pal.removeBack);
-            Lines.square(tile.drawx(), tile.drawy() - 1, rad);
-            Draw.tint(Pal.remove);
-            Lines.square(tile.drawx(), tile.drawy(), rad);
-        }
-    }
-
-    /** Draws a placement icon for a specific block. */
-    void drawPlace(int x, int y, Block block, int rotation, int prevX, int prevY, int prevRotation){
-        if(validPlace(x, y, block, rotation)){
-            block.getPlaceDraw(placeDraw, rotation, prevX, prevY, prevRotation);
-
-            Draw.color();
-            Draw.rect(placeDraw.region, x * tilesize + block.offset(), y * tilesize + block.offset(),
-            placeDraw.region.getWidth() * Draw.scl * placeDraw.scalex,
-            placeDraw.region.getHeight() * Draw.scl * placeDraw.scaley,
-            block.rotate ? placeDraw.rotation * 90 : 0);
-
-            Draw.color(Pal.accent);
-            for(int i = 0; i < 4; i++){
-                Point2 p = Geometry.d8edge[i];
-                float offset = -Math.max(block.size - 1, 0) / 2f * tilesize;
-                if(i % 2 == 0)
-                    Draw.rect("block-select", x * tilesize + block.offset() + offset * p.x, y * tilesize + block.offset() + offset * p.y, i * 90);
-            }
-            Draw.color();
-        }else{
-            Draw.color(Pal.removeBack);
-            Lines.square(x * tilesize + block.offset(), y * tilesize + block.offset() - 1, block.size * tilesize / 2f - 1);
-            Draw.color(Pal.remove);
-            Lines.square(x * tilesize + block.offset(), y * tilesize + block.offset(), block.size * tilesize / 2f - 1);
-        }
-    }
-
     @Override
-    public void buildUI(Table table){
-        table.addImage("blank").color(Pal.accent).height(3f).colspan(4).growX();
+    public void buildPlacementUI(Table table){
+        table.addImage().color(Pal.gray).height(4f).colspan(4).growX();
         table.row();
         table.left().margin(0f).defaults().size(48f);
 
-        table.addImageButton("icon-break", "clear-toggle-partial", 16 * 2f, () -> {
+        table.addImageButton(Icon.breakSmall, Styles.clearTogglePartiali, () -> {
             mode = mode == breaking ? block == null ? none : placing : breaking;
             lastBlock = block;
-            if(mode == breaking){
-                showGuide("removearea", this::isAreaBreaking);
-            }
-        }).update(l -> l.setChecked(mode == breaking));
+        }).update(l -> l.setChecked(mode == breaking)).name("breakmode");
 
         //diagonal swap button
-        table.addImageButton("icon-diagonal", "clear-toggle-partial", 16 * 2f, () -> {
+        table.addImageButton(Icon.diagonalSmall, Styles.clearTogglePartiali, () -> {
             Core.settings.put("swapdiagonal", !Core.settings.getBool("swapdiagonal"));
             Core.settings.save();
         }).update(l -> l.setChecked(Core.settings.getBool("swapdiagonal")));
 
         //rotate button
-        table.addImageButton("icon-arrow", "clear-partial", 16 * 2f, () -> rotation = Mathf.mod(rotation + 1, 4))
-        .update(i -> i.getImage().setRotationOrigin(rotation * 90, Align.center)).visible(() -> block != null && block.rotate);
+        table.addImageButton(Icon.arrowSmall, Styles.clearTogglePartiali, () -> {
+            if(block != null && block.rotate){
+                rotation = Mathf.mod(rotation + 1, 4);
+            }else{
+                schematicMode = !schematicMode;
+                if(schematicMode){
+                    block = null;
+                    mode = none;
+                }
+            }
+        }).update(i -> {
+            boolean arrow = block != null && block.rotate;
+
+            i.getImage().setRotationOrigin(!arrow ? 0 : rotation * 90, Align.center);
+            i.getStyle().imageUp = arrow ? Icon.arrowSmall : Icon.pasteSmall;
+            i.setChecked(!arrow && schematicMode);
+        });
 
         //confirm button
-        table.addImageButton("icon-check", "clear-partial", 16 * 2f, () -> {
-            for(PlaceRequest request : selection){
+        table.addImageButton(Icon.checkSmall, Styles.clearPartiali, () -> {
+            for(BuildRequest request : selectRequests){
                 Tile tile = request.tile();
 
                 //actually place/break all selected blocks
                 if(tile != null){
-                    if(!request.remove){
+                    if(!request.breaking){
+                        if(validPlace(request.x, request.y, request.block, request.rotation)){
+                            BuildRequest other = getRequest(request.x, request.y, request.block.size, null);
+                            BuildRequest copy = request.copy();
+
+                            if(copy.hasConfig && copy.block.posConfig){
+                                copy.config = Pos.get(Pos.x(copy.config) + copy.x - copy.originalX, Pos.y(copy.config) + copy.y - copy.originalY);
+                            }
+
+                            if(other == null){
+                                player.addBuildRequest(copy);
+                            }else if(!other.breaking && other.x == request.x && other.y == request.y && other.block.size == request.block.size){
+                                player.buildQueue().remove(other);
+                                player.addBuildRequest(copy);
+                            }
+                        }
+
                         rotation = request.rotation;
-                        Block before = block;
-                        block = request.block;
-                        tryPlaceBlock(tile.x, tile.y);
-                        block = before;
                     }else{
                         tryBreakBlock(tile.x, tile.y);
                     }
@@ -305,24 +241,60 @@ public class MobileInput extends InputHandler implements GestureListener{
             }
 
             //move all current requests to removal array so they fade out
-            removals.addAll(selection);
-            selection.clear();
+            removals.addAll(selectRequests.select(r -> !r.breaking));
+            selectRequests.clear();
             selecting = false;
-        }).visible(() -> !selection.isEmpty());
+        }).visible(() -> !selectRequests.isEmpty()).name("confirmplace");
+    }
 
-        Core.scene.table(t -> {
-           t.bottom().left().visible(() -> player.isBuilding() || block != null || mode == breaking);
-           t.addImageTextButton("$cancel", "icon-cancel", 16*2, () -> {
-               player.clearBuilding();
-               mode = none;
-               block = null;
-           }).width(155f);
+    @Override
+    public void buildUI(Group group){
+        Boolp schem = () -> lastSchematic != null && !selectRequests.isEmpty();
+
+        group.fill(t -> {
+            t.bottom().left().visible(() -> (player.isBuilding() || block != null || mode == breaking || !selectRequests.isEmpty()) && !schem.get());
+            t.addImageTextButton("$cancel", Icon.cancelSmall, () -> {
+                player.clearBuilding();
+                selectRequests.clear();
+                mode = none;
+                block = null;
+            }).width(155f);
+        });
+
+        group.fill(t -> {
+            t.visible(schem);
+            t.bottom().left();
+            t.table(Tex.pane, b -> {
+                b.defaults().size(50f);
+
+                ImageButtonStyle style = Styles.clearPartiali;
+
+                b.addImageButton(Icon.floppySmall, style, this::showSchematicSave).disabled(f -> lastSchematic == null || lastSchematic.file != null);
+                b.addImageButton(Icon.cancelSmall, style, () -> {
+                    selectRequests.clear();
+                });
+                b.row();
+                b.addImageButton(Icon.flipSmall, style, () -> flipRequests(selectRequests, true));
+                b.addImageButton(Icon.flipSmall, style, () -> flipRequests(selectRequests, false)).update(i -> i.getImage().setRotationOrigin(90f, Align.center));
+                b.row();
+                b.addImageButton(Icon.rotateSmall, style, () -> rotateRequests(selectRequests, 1));
+
+            }).margin(4f);
         });
     }
 
     @Override
-    public boolean isDrawing(){
-        return selection.size > 0 || removals.size > 0 || lineMode || player.target != null || mode != PlaceMode.none;
+    protected int schemOriginX(){
+        Tmp.v1.setZero();
+        selectRequests.each(r -> Tmp.v1.add(r.drawx(), r.drawy()));
+        return world.toTile(Tmp.v1.scl(1f / selectRequests.size).x);
+    }
+
+    @Override
+    protected int schemOriginY(){
+        Tmp.v1.setZero();
+        selectRequests.each(r -> Tmp.v1.add(r.drawx(), r.drawy()));
+        return world.toTile(Tmp.v1.scl(1f / selectRequests.size).y);
     }
 
     @Override
@@ -331,55 +303,53 @@ public class MobileInput extends InputHandler implements GestureListener{
     }
 
     @Override
-    public void drawOutlined(){
+    public void drawBottom(){
         Lines.stroke(1f);
 
         //draw removals
-        for(PlaceRequest request : removals){
+        for(BuildRequest request : removals){
             Tile tile = request.tile();
 
             if(tile == null) continue;
 
-            request.scale = Mathf.lerpDelta(request.scale, 0f, 0.2f);
-            request.redness = Mathf.lerpDelta(request.redness, 0f, 0.2f);
+            request.animScale = Mathf.lerpDelta(request.animScale, 0f, 0.2f);
 
-            drawRequest(request, null);
+            if(request.breaking){
+                drawSelected(request.x, request.y, tile.block(), Pal.remove);
+            }else{
+                request.block.drawRequest(request, allRequests(), true);
+            }
         }
 
-        PlaceRequest last = null;
-
         //draw list of requests
-        for(PlaceRequest request : selection){
+        for(BuildRequest request : selectRequests){
             Tile tile = request.tile();
 
             if(tile == null) continue;
 
-            if((!request.remove && validPlace(tile.x, tile.y, request.block, request.rotation))
-            || (request.remove && validBreak(tile.x, tile.y))){
-                request.scale = Mathf.lerpDelta(request.scale, 1f, 0.2f);
-                request.redness = Mathf.lerpDelta(request.redness, 0f, 0.2f);
+            if((!request.breaking && validPlace(tile.x, tile.y, request.block, request.rotation))
+            || (request.breaking && validBreak(tile.x, tile.y))){
+                request.animScale = Mathf.lerpDelta(request.animScale, 1f, 0.2f);
             }else{
-                request.scale = Mathf.lerpDelta(request.scale, 0.6f, 0.1f);
-                request.redness = Mathf.lerpDelta(request.redness, 0.9f, 0.2f);
+                request.animScale = Mathf.lerpDelta(request.animScale, 0.6f, 0.1f);
             }
 
             Tmp.c1.set(Draw.getMixColor());
 
-            if(!request.remove && request == lastPlaced && request.block != null){
+            if(!request.breaking && request == lastPlaced && request.block != null){
                 Draw.mixcol();
                 if(request.block.rotate) drawArrow(request.block, tile.x, tile.y, request.rotation);
             }
 
-            Draw.mixcol(Tmp.c1, 1f);
-            drawRequest(request, last);
+            //Draw.mixcol(Tmp.c1, 1f);
+            Draw.reset();
+            drawRequest(request);
 
             //draw last placed request
-            if(!request.remove && request == lastPlaced && request.block != null){
+            if(!request.breaking && request == lastPlaced && request.block != null){
                 Draw.mixcol();
                 request.block.drawPlace(tile.x, tile.y, rotation, validPlace(tile.x, tile.y, request.block, rotation));
             }
-
-            last = request;
         }
 
         Draw.mixcol();
@@ -392,52 +362,25 @@ public class MobileInput extends InputHandler implements GestureListener{
 
             if(mode == placing && block != null){
                 //draw placing
-
-                prevX = lineStartX;
-                prevY = lineStartY;
-                prevRotation = rotation;
-
-                iterateLine(lineStartX, lineStartY, tileX, tileY, l -> {
-                    if(l.last && block.rotate){
-                        drawArrow(block, l.x, l.y, l.rotation);
+                for(int i = 0; i < lineRequests.size; i++){
+                    BuildRequest req = lineRequests.get(i);
+                    if(i == lineRequests.size - 1 && req.block.rotate){
+                        drawArrow(block, req.x, req.y, req.rotation);
                     }
-                    drawPlace(l.x, l.y, block, l.rotation, prevX - l.x, prevY - l.y, prevRotation);
 
-                    rotation = l.rotation;
-                    prevX = l.x;
-                    prevY = l.y;
-                    prevRotation = l.rotation;
-                });
-            }else if(mode == breaking){
-                //draw breaking
-                NormalizeDrawResult result = PlaceUtils.normalizeDrawArea(Blocks.air, lineStartX, lineStartY, tileX, tileY, false, maxLength, 1f);
-                NormalizeResult dresult = PlaceUtils.normalizeArea(lineStartX, lineStartY, tileX, tileY, rotation, false, maxLength);
-
-                for(int x = dresult.x; x <= dresult.x2; x++){
-                    for(int y = dresult.y; y <= dresult.y2; y++){
-                        Tile other = world.ltile(x, y);
-                        if(other == null || !validBreak(other.x, other.y)) continue;
-
-                        Draw.color(Pal.removeBack);
-                        Lines.square(other.drawx(), other.drawy() - 1, other.block().size * tilesize / 2f - 1);
-                        Draw.color(Pal.remove);
-                        Lines.square(other.drawx(), other.drawy(), other.block().size * tilesize / 2f - 1);
-                    }
+                    BuildRequest request = lineRequests.get(i);
+                    request.block.drawRequest(request, allRequests(), validPlace(request.x, request.y, request.block, request.rotation) && getRequest(req.x, request.y, request.block.size, null) == null);
+                    drawSelected(request.x, request.y, request.block, Pal.accent);
                 }
-
-                Draw.color(Pal.removeBack);
-                Lines.rect(result.x, result.y - 1, result.x2 - result.x, result.y2 - result.y);
-                Draw.color(Pal.remove);
-                Lines.rect(result.x, result.y, result.x2 - result.x, result.y2 - result.y);
-
+            }else if(mode == breaking){
+                drawBreakSelection(lineStartX, lineStartY, tileX, tileY);
             }
-
         }
 
         TargetTrait target = player.target;
 
         //draw targeting crosshair
-        if(target != null){
+        if(target != null && !state.isEditor()){
             if(target != lastTarget){
                 crosshairScale = 0f;
                 lastTarget = target;
@@ -457,12 +400,48 @@ public class MobileInput extends InputHandler implements GestureListener{
         Draw.reset();
     }
 
+    @Override
+    public void drawTop(){
+
+        //draw schematic selection
+        if(mode == schematicSelect){
+            drawSelection(lineStartX, lineStartY, lastLineX, lastLineY, Vars.maxSchematicSize);
+        }
+    }
+
+    @Override
+    protected void drawRequest(BuildRequest request){
+        if(request.tile() == null) return;
+        brequest.animScale = request.animScale = Mathf.lerpDelta(request.animScale, 1f, 0.1f);
+
+        if(request.breaking){
+            drawSelected(request.x, request.y, request.tile().block(), Pal.remove);
+        }else{
+            request.block.drawRequest(request, allRequests(), validPlace(request.x, request.y, request.block, request.rotation));
+            drawSelected(request.x, request.y, request.block, Pal.accent);
+        }
+    }
+
     //endregion
     //region input events
 
     @Override
+    public boolean isBreaking(){
+        return mode == breaking;
+    }
+
+    @Override
+    public void useSchematic(Schematic schem){
+        selectRequests.clear();
+        selectRequests.addAll(schematics.toRequests(schem, world.toTile(player.x), world.toTile(player.y)));
+        lastSchematic = schem;
+    }
+
+    @Override
     public boolean touchDown(int screenX, int screenY, int pointer, KeyCode button){
         if(state.is(State.menu) || player.isDead()) return false;
+
+        down = true;
 
         //get tile on cursor
         Tile cursor = tileAt(screenX, screenY);
@@ -473,11 +452,23 @@ public class MobileInput extends InputHandler implements GestureListener{
         if(cursor == null || Core.scene.hasMouse(screenX, screenY)) return false;
 
         //only begin selecting if the tapped block is a request
-        selecting = hasRequest(cursor) && isPlacing() && mode == placing;
+        selecting = hasRequest(cursor);
 
         //call tap events
-        if(pointer == 0 && !selecting && mode == none){
-            tryTapPlayer(worldx, worldy);
+        if(pointer == 0 && !selecting){
+            if(schematicMode && block == null){
+                mode = schematicSelect;
+                //engage schematic selection mode
+                int tileX = tileX(screenX);
+                int tileY = tileY(screenY);
+                lineStartX = tileX;
+                lineStartY = tileY;
+                lastLineX = tileX;
+                lastLineY = tileY;
+            }else if(!tryTapPlayer(worldx, worldy) && Core.settings.getBool("keyboard")){
+                //shoot on touch down when in keyboard mode
+                player.isShooting = true;
+            }
         }
 
         return false;
@@ -485,6 +476,13 @@ public class MobileInput extends InputHandler implements GestureListener{
 
     @Override
     public boolean touchUp(int screenX, int screenY, int pointer, KeyCode button){
+        lastZoom = renderer.getScale();
+
+        if(!Core.input.isTouched()){
+            down = false;
+        }
+
+        selecting = false;
 
         //place down a line if in line mode
         if(lineMode){
@@ -492,40 +490,22 @@ public class MobileInput extends InputHandler implements GestureListener{
             int tileY = tileY(screenY);
 
             if(mode == placing && isPlacing()){
-                iterateLine(lineStartX, lineStartY, tileX, tileY, l -> {
-                    Tile tile = world.tile(l.x, l.y);
-                    if(tile != null && hasRequest(tile)){
-                        return;
-                    }
-
-                    PlaceRequest request = new PlaceRequest(l.x, l.y, block, l.rotation);
-                    request.scale = 1f;
-                    selection.add(request);
-                });
+                flushSelectRequests(lineRequests);
+                Events.fire(new LineConfirmEvent());
             }else if(mode == breaking){
-                //normalize area
-                NormalizeResult result = PlaceUtils.normalizeArea(lineStartX, lineStartY, tileX, tileY, rotation, false, maxLength);
-
-                //break everything in area
-                for(int x = 0; x <= Math.abs(result.x2 - result.x); x++){
-                    for(int y = 0; y <= Math.abs(result.y2 - result.y); y++){
-                        int wx = lineStartX + x * Mathf.sign(tileX - lineStartX);
-                        int wy = lineStartY + y * Mathf.sign(tileY - lineStartY);
-
-                        Tile tar = world.ltile(wx, wy);
-
-                        if(tar == null) continue;
-
-                        if(!hasRequest(world.tile(tar.x, tar.y)) && validBreak(tar.x, tar.y)){
-                            PlaceRequest request = new PlaceRequest(tar.x, tar.y);
-                            request.scale = 1f;
-                            selection.add(request);
-                        }
-                    }
-                }
+                removeSelection(lineStartX, lineStartY, tileX, tileY, true);
             }
 
             lineMode = false;
+        }else if(mode == schematicSelect){
+            selectRequests.clear();
+            lastSchematic = schematics.create(lineStartX, lineStartY, lastLineX, lastLineY);
+            useSchematic(lastSchematic);
+            if(selectRequests.isEmpty()){
+                lastSchematic = null;
+            }
+            schematicMode = false;
+            mode = none;
         }else{
             Tile tile = tileAt(screenX, screenY);
 
@@ -544,17 +524,20 @@ public class MobileInput extends InputHandler implements GestureListener{
         Tile cursor = tileAt(x, y);
 
         //ignore off-screen taps
-        if(cursor == null || Core.scene.hasMouse(x, y)) return false;
+        if(cursor == null || Core.scene.hasMouse(x, y) || schematicMode) return false;
 
         //remove request if it's there
         //long pressing enables line mode otherwise
         lineStartX = cursor.x;
         lineStartY = cursor.y;
+        lastLineX = cursor.x;
+        lastLineY = cursor.y;
         lineMode = true;
 
         if(mode == breaking){
             Effects.effect(Fx.tapBlock, cursor.worldx(), cursor.worldy(), 1f);
         }else if(block != null){
+            updateLine(lineStartX, lineStartY, cursor.x, cursor.y);
             Effects.effect(Fx.tapBlock, cursor.worldx() + block.offset(), cursor.worldy() + block.offset(), block.size);
         }
 
@@ -580,11 +563,11 @@ public class MobileInput extends InputHandler implements GestureListener{
             removeRequest(getRequest(cursor));
         }else if(mode == placing && isPlacing() && validPlace(cursor.x, cursor.y, block, rotation) && !checkOverlapPlacement(cursor.x, cursor.y, block)){
             //add to selection queue if it's a valid place position
-            selection.add(lastPlaced = new PlaceRequest(cursor.x, cursor.y, block, rotation));
+            selectRequests.add(lastPlaced = new BuildRequest(cursor.x, cursor.y, rotation, block));
         }else if(mode == breaking && validBreak(cursor.link().x, cursor.link().y) && !hasRequest(cursor.link())){
             //add to selection queue if it's a valid BREAK position
             cursor = cursor.link();
-            selection.add(new PlaceRequest(cursor.x, cursor.y));
+            selectRequests.add(new BuildRequest(cursor.x, cursor.y));
         }else if(!canTapPlayer(worldx, worldy) && !tileTapped(cursor.link())){
             tryBeginMine(cursor);
         }
@@ -594,18 +577,40 @@ public class MobileInput extends InputHandler implements GestureListener{
 
     @Override
     public void update(){
-        if(state.is(State.menu) || player.isDead()){
-            selection.clear();
+        if(state.is(State.menu) ){
+            selectRequests.clear();
             removals.clear();
             mode = none;
         }
 
+        if(player.isDead()){
+            mode = none;
+        }
+
+        //zoom things
+        if(Math.abs(Core.input.axisTap(Binding.zoom)) > 0 && (Core.input.keyDown(Binding.zoom_hold))){
+            renderer.scaleCamera(Core.input.axisTap(Binding.zoom));
+        }
+
+        if(!Core.settings.getBool("keyboard")){
+            //move camera around
+            float camSpeed = 6f;
+            Core.camera.position.add(Tmp.v1.setZero().add(Core.input.axis(Binding.move_x), Core.input.axis(Binding.move_y)).nor().scl(Time.delta() * camSpeed));
+        }
+
+        if(Core.settings.getBool("keyboard")){
+            if(Core.input.keyRelease(Binding.select)){
+                player.isShooting = false;
+            }
+
+            if(player.isShooting && !canShoot()){
+                player.isShooting = false;
+            }
+        }
+
         //reset state when not placing
         if(mode == none){
-            selecting = false;
             lineMode = false;
-            removals.addAll(selection);
-            selection.clear();
         }
 
         if(lineMode && mode == placing && block == null){
@@ -617,12 +622,24 @@ public class MobileInput extends InputHandler implements GestureListener{
             mode = placing;
         }
 
-        if(block != null){
-            showGuide("placeline", this::isLinePlacing);
-        }
-
         if(block == null && mode == placing){
             mode = none;
+        }
+
+        //stop schematic when in block mode
+        if(block != null){
+            schematicMode = false;
+        }
+
+        //stop select when not in schematic mode
+        if(!schematicMode && mode == schematicSelect){
+            mode = none;
+        }
+
+        if(mode == schematicSelect){
+            lastLineX = rawTileX();
+            lastLineY = rawTileY();
+            autoPan();
         }
 
         //automatically switch to placing after a new recipe is selected
@@ -635,61 +652,76 @@ public class MobileInput extends InputHandler implements GestureListener{
             lineScale = Mathf.lerpDelta(lineScale, 1f, 0.1f);
 
             //When in line mode, pan when near screen edges automatically
-            if(Core.input.isTouched(0) && lineMode){
-                float screenX = Core.input.mouseX(), screenY = Core.input.mouseY();
+            if(Core.input.isTouched(0)){
+               autoPan();
+            }
 
-                float panX = 0, panY = 0;
+            int lx = tileX(Core.input.mouseX()), ly = tileY(Core.input.mouseY());
 
-                if(screenX <= edgePan){
-                    panX = -(edgePan - screenX);
-                }
-
-                if(screenX >= Core.graphics.getWidth() - edgePan){
-                    panX = (screenX - Core.graphics.getWidth()) + edgePan;
-                }
-
-                if(screenY <= edgePan){
-                    panY = -(edgePan - screenY);
-                }
-
-                if(screenY >= Core.graphics.getHeight() - edgePan){
-                    panY = (screenY - Core.graphics.getHeight()) + edgePan;
-                }
-
-                vector.set(panX, panY).scl((Core.camera.width) / Core.graphics.getWidth());
-                vector.limit(maxPanSpeed);
-
-                //pan view
-                Core.camera.position.x += vector.x;
-                Core.camera.position.y += vector.y;
+            if((lastLineX != lx || lastLineY != ly) && isPlacing()){
+                lastLineX = lx;
+                lastLineY = ly;
+                updateLine(lineStartX, lineStartY, lx, ly);
             }
         }else{
+            lineRequests.clear();
             lineScale = 0f;
         }
 
         //remove place requests that have disappeared
         for(int i = removals.size - 1; i >= 0; i--){
-            PlaceRequest request = removals.get(i);
+            BuildRequest request = removals.get(i);
 
-            if(request.scale <= 0.0001f){
+            if(request.animScale <= 0.0001f){
                 removals.remove(i);
                 i--;
             }
         }
     }
 
+    protected void autoPan(){
+        float screenX = Core.input.mouseX(), screenY = Core.input.mouseY();
+
+        float panX = 0, panY = 0;
+
+        if(screenX <= edgePan){
+            panX = -(edgePan - screenX);
+        }
+
+        if(screenX >= Core.graphics.getWidth() - edgePan){
+            panX = (screenX - Core.graphics.getWidth()) + edgePan;
+        }
+
+        if(screenY <= edgePan){
+            panY = -(edgePan - screenY);
+        }
+
+        if(screenY >= Core.graphics.getHeight() - edgePan){
+            panY = (screenY - Core.graphics.getHeight()) + edgePan;
+        }
+
+        vector.set(panX, panY).scl((Core.camera.width) / Core.graphics.getWidth());
+        vector.limit(maxPanSpeed);
+
+        //pan view
+        Core.camera.position.x += vector.x;
+        Core.camera.position.y += vector.y;
+    }
+
     @Override
     public boolean pan(float x, float y, float deltaX, float deltaY){
-        if(Core.scene.hasDialog()) return false;
+        if(Core.scene.hasDialog() || Core.settings.getBool("keyboard")) return false;
 
         float scale = Core.camera.width / Core.graphics.getWidth();
         deltaX *= scale;
         deltaY *= scale;
 
         //can't pan in line mode with one finger or while dropping items!
-        if((lineMode && !Core.input.isTouched(1)) || droppingItem){
+        if((lineMode && !Core.input.isTouched(1)) || droppingItem || schematicMode){
             return false;
         }
+
+        if(!down) return false;
 
         if(selecting){ //pan all requests
             shiftDeltaX += deltaX;
@@ -699,8 +731,8 @@ public class MobileInput extends InputHandler implements GestureListener{
             int shiftedY = (int)(shiftDeltaY / tilesize);
 
             if(Math.abs(shiftedX) > 0 || Math.abs(shiftedY) > 0){
-                for(PlaceRequest req : selection){
-                    if(req.remove) continue; //don't shift removal requests
+                for(BuildRequest req : selectRequests){
+                    if(req.breaking) continue; //don't shift removal requests
                     req.x += shiftedX;
                     req.y += shiftedY;
                 }
@@ -725,47 +757,14 @@ public class MobileInput extends InputHandler implements GestureListener{
 
     @Override
     public boolean zoom(float initialDistance, float distance){
-        if(lastDistance == -1) lastDistance = initialDistance;
+        if(Core.settings.getBool("keyboard")) return false;
+        if(lastZoom < 0){
+            lastZoom = renderer.getScale();
+        }
 
-        float amount = (Mathf.sign(distance > lastDistance) * 0.04f) * Time.delta();
-        renderer.scaleCamera(io.anuke.arc.scene.ui.layout.Unit.dp.scl(amount));
-        lastDistance = distance;
+        renderer.setScale(distance / initialDistance * lastZoom);
         return true;
     }
 
-    float clerp(float value, float min, float max){
-        final float alpha = 0.07f;
-        return value < min ? Mathf.lerpDelta(value, min, alpha) : value > max ? Mathf.lerpDelta(value, max, alpha) : value;
-    }
-
     //endregion
-
-    private class PlaceRequest{
-        int x, y;
-        Block block;
-        int rotation;
-        boolean remove;
-
-        //animation variables
-        float scale;
-        float redness;
-
-        PlaceRequest(int x, int y, Block block, int rotation){
-            this.x = x;
-            this.y = y;
-            this.block = block;
-            this.rotation = rotation;
-            this.remove = false;
-        }
-
-        PlaceRequest(int x, int y){
-            this.x = x;
-            this.y = y;
-            this.remove = true;
-        }
-
-        Tile tile(){
-            return world.tile(x, y);
-        }
-    }
 }

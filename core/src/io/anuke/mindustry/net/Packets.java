@@ -1,11 +1,12 @@
 package io.anuke.mindustry.net;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.util.serialization.Base64Coder;
-import io.anuke.mindustry.game.Version;
-import io.anuke.mindustry.io.TypeIO;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.util.serialization.*;
+import io.anuke.mindustry.core.*;
+import io.anuke.mindustry.io.*;
 
-import java.nio.ByteBuffer;
+import java.nio.*;
 
 /**
  * Class for storing all packets.
@@ -14,7 +15,7 @@ public class Packets{
 
     public enum KickReason{
         kick, clientOutdated, serverOutdated, banned, gameover(true), recentKick,
-        nameInUse, idInUse, nameEmpty, customClient, serverClose;
+        nameInUse, idInUse, nameEmpty, customClient, serverClose, vote, typeMismatch, whitelist, playerLimit;
 
         public final boolean quiet;
 
@@ -41,7 +42,6 @@ public class Packets{
     }
 
     public static class Connect implements Packet{
-        public int id;
         public String addressTCP;
 
         @Override
@@ -51,7 +51,7 @@ public class Packets{
     }
 
     public static class Disconnect implements Packet{
-        public int id;
+        public String reason;
 
         @Override
         public boolean isImportant(){
@@ -66,6 +66,7 @@ public class Packets{
     public static class ConnectPacket implements Packet{
         public int version;
         public String versionType;
+        public Array<String> mods;
         public String name, uuid, usid;
         public boolean mobile;
         public int color;
@@ -79,6 +80,10 @@ public class Packets{
             buffer.put(mobile ? (byte)1 : 0);
             buffer.putInt(color);
             buffer.put(Base64Coder.decode(uuid));
+            buffer.putInt(mods.size);
+            for(int i = 0; i < mods.size; i++){
+                TypeIO.writeString(buffer, mods.get(i));
+            }
         }
 
         @Override
@@ -92,6 +97,11 @@ public class Packets{
             byte[] idbytes = new byte[8];
             buffer.get(idbytes);
             uuid = new String(Base64Coder.encode(idbytes));
+            int totalMods = buffer.getInt();
+            mods = new Array<>(totalMods);
+            for(int i = 0; i < totalMods; i++){
+                mods.add(TypeIO.readString(buffer));
+            }
         }
     }
 

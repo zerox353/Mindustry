@@ -1,36 +1,35 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
-import io.anuke.arc.input.KeyCode;
-import io.anuke.arc.scene.ui.Dialog;
-import io.anuke.arc.scene.ui.ScrollPane;
-import io.anuke.arc.util.Align;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.game.EventType.ResizeEvent;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.net.Net;
+import io.anuke.arc.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
 
-import static io.anuke.mindustry.Vars.state;
+import static io.anuke.mindustry.Vars.*;
 
 public class FloatingDialog extends Dialog{
     private boolean wasPaused;
     protected boolean shouldPause;
 
-    public FloatingDialog(String title){
-        super(title, "dialog");
+    public FloatingDialog(String title, DialogStyle style){
+        super(title, style);
         setFillParent(true);
         this.title.setAlignment(Align.center);
         titleTable.row();
-        titleTable.addImage("white", Pal.accent)
+        titleTable.addImage(Tex.whiteui, Pal.accent)
         .growX().height(3f).pad(4f);
 
         hidden(() -> {
             if(shouldPause && !state.is(State.menu)){
-                if(!wasPaused || Net.active()){
+                if(!wasPaused || net.active()){
                     state.set(State.playing);
                 }
             }
+            Sounds.back.play();
         });
 
         shown(() -> {
@@ -39,31 +38,25 @@ public class FloatingDialog extends Dialog{
                 state.set(State.paused);
             }
         });
+    }
 
-        boolean[] done = {false};
-
-        shown(() -> Core.app.post(() ->
-        forEach(child -> {
-            if(done[0]) return;
-
-            if(child instanceof ScrollPane){
-                Core.scene.setScrollFocus(child);
-                done[0] = true;
-            }
-        })));
+    public FloatingDialog(String title){
+        this(title, Core.scene.getStyle(DialogStyle.class));
     }
 
     protected void onResize(Runnable run){
         Events.on(ResizeEvent.class, event -> {
-            if(isShown()){
+            if(isShown() && Core.scene.getDialog() == this){
                 run.run();
+                updateScrollFocus();
             }
         });
     }
 
     @Override
     public void addCloseButton(){
-        buttons.addImageTextButton("$back", "icon-arrow-left", 30f, this::hide).size(210f, 64f);
+        buttons.defaults().size(210f, 64f);
+        buttons.addImageTextButton("$back", Icon.arrowLeft, this::hide).size(210f, 64f);
 
         keyDown(key -> {
             if(key == KeyCode.ESCAPE || key == KeyCode.BACK){

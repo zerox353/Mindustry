@@ -1,22 +1,18 @@
 package io.anuke.mindustry.core;
 
 import io.anuke.arc.collection.*;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.Pixmap;
-import io.anuke.arc.util.Log;
+import io.anuke.arc.func.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.content.*;
-import io.anuke.mindustry.entities.bullet.Bullet;
-import io.anuke.mindustry.entities.bullet.BulletType;
-import io.anuke.mindustry.entities.effect.*;
-import io.anuke.mindustry.entities.traits.TypeTrait;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.ctype.*;
+import io.anuke.mindustry.entities.bullet.*;
+import io.anuke.mindustry.mod.Mods.*;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.LegacyColorMapper;
+import io.anuke.mindustry.world.*;
 
 import static io.anuke.arc.Core.files;
+import static io.anuke.mindustry.Vars.mods;
 
 /**
  * Loads all game content.
@@ -25,12 +21,10 @@ import static io.anuke.arc.Core.files;
 @SuppressWarnings("unchecked")
 public class ContentLoader{
     private boolean loaded = false;
-    private boolean verbose = false;
-
     private ObjectMap<String, MappableContent>[] contentNameMap = new ObjectMap[ContentType.values().length];
     private Array<Content>[] contentMap = new Array[ContentType.values().length];
     private MappableContent[][] temporaryMapper;
-    private ObjectSet<Consumer<Content>> initialization = new ObjectSet<>();
+    private ObjectSet<Cons<Content>> initialization = new ObjectSet<>();
     private ContentList[] content = {
         new Fx(),
         new Items(),
@@ -43,23 +37,26 @@ public class ContentLoader{
         new Loadouts(),
         new TechTree(),
         new Zones(),
+        new TypeIDs(),
 
         //these are not really content classes, but this makes initialization easier
         new LegacyColorMapper(),
     };
 
-    public void setVerbose(){
-        verbose = true;
+    /** Clears all initialized content.*/
+    public void clear(){
+        contentNameMap = new ObjectMap[ContentType.values().length];
+        contentMap = new Array[ContentType.values().length];
+        initialization = new ObjectSet<>();
+        loaded = false;
     }
 
     /** Creates all content types. */
-    public void load(){
+    public void createContent(){
         if(loaded){
             Log.info("Content already loaded, skipping.");
             return;
         }
-
-        registerTypes();
 
         for(ContentType type : ContentType.values()){
             contentMap[type.ordinal()] = new Array<>();
@@ -70,23 +67,11 @@ public class ContentLoader{
             list.load();
         }
 
-        int total = 0;
-
-        for(ContentType type : ContentType.values()){
-
-            for(Content c : contentMap[type.ordinal()]){
-                if(c instanceof MappableContent){
-                    String name = ((MappableContent)c).name;
-                    if(contentNameMap[type.ordinal()].containsKey(name)){
-                        throw new IllegalArgumentException("Two content objects cannot have the same name! (issue: '" + name + "')");
-                    }
-                    contentNameMap[type.ordinal()].put(name, (MappableContent)c);
-                }
-                total++;
-            }
+        if(mods != null){
+            mods.loadContent();
         }
 
-        //set up ID mapping
+        //check up ID mapping, make sure it's linear
         for(Array<Content> arr : contentMap){
             for(int i = 0; i < arr.size; i++){
                 int id = arr.get(i).id;
@@ -96,25 +81,44 @@ public class ContentLoader{
             }
         }
 
-        if(verbose){
-            Log.info("--- CONTENT INFO ---");
-            for(int k = 0; k < contentMap.length; k++){
-                Log.info("[{0}]: loaded {1}", ContentType.values()[k].name(), contentMap[k].size);
-            }
-            Log.info("Total content loaded: {0}", total);
-            Log.info("-------------------");
-        }
-
         loaded = true;
     }
 
+    /** Logs content statistics.*/
+    public void logContent(){
+        Log.info("--- CONTENT INFO ---");
+        for(int k = 0; k < contentMap.length; k++){
+            Log.info("[{0}]: loaded {1}", ContentType.values()[k].name(), contentMap[k].size);
+        }
+        Log.info("Total content loaded: {0}", Array.with(ContentType.values()).mapInt(c -> contentMap[c.ordinal()].size).sum());
+        Log.info("-------------------");
+    }
+
+    /** Calls Content#init() on everything. Use only after all modules have been created.*/
+    public void init(){
+        initialize(Content::init);
+    }
+
+    /** Calls Content#load() on everything. Use only after all modules have been created on the client.*/
+    public void load(){
+        initialize(Content::load);
+    }
+
     /** Initializes all content with the specified function. */
-    public void initialize(Consumer<Content> callable){
+    private void initialize(Cons<Content> callable){
         if(initialization.contains(callable)) return;
 
         for(ContentType type : ContentType.values()){
             for(Content content : contentMap[type.ordinal()]){
-                callable.accept(content);
+                try{
+                    callable.get(content);
+                }catch(Throwable e){
+                    if(content.mod != null){
+                        mods.handleError(new ModLoadException(content, e), content.mod);
+                    }else{
+                        throw new RuntimeException(e);
+                    }
+                }
             }
         }
 
@@ -137,16 +141,20 @@ public class ContentLoader{
         pixmap.dispose();
     }
 
-    public void verbose(boolean verbose){
-        this.verbose = verbose;
-    }
-
     public void dispose(){
-        //clear all content, currently not needed
+        //clear all content, currently not used
     }
 
     public void handleContent(Content content){
         contentMap[content.getContentType().ordinal()].add(content);
+
+    }
+
+    public void handleMappableContent(MappableContent content){
+        if(contentNameMap[content.getContentType().ordinal()].containsKey(content.name)){
+            throw new IllegalArgumentException("Two content objects cannot have the same name! (issue: '" + content.name + "')");
+        }
+        contentNameMap[content.getContentType().ordinal()].put(content.name, content);
     }
 
     public void setTemporaryMapper(MappableContent[][] temporaryMapper){
@@ -172,7 +180,7 @@ public class ContentLoader{
                 return null;
             }
             if(temporaryMapper[type.ordinal()].length <= id || temporaryMapper[type.ordinal()][id] == null){
-                return getByID(type, 0); //default value is always ID 0
+                return (T)contentMap[type.ordinal()].get(0); //default value is always ID 0
             }
             return (T)temporaryMapper[type.ordinal()][id];
         }
@@ -227,17 +235,5 @@ public class ContentLoader{
 
     public Array<UnitType> units(){
         return getBy(ContentType.unit);
-    }
-
-    /**
-     * Registers sync IDs for all types of sync entities.
-     * Do not register units here!
-     */
-    private void registerTypes(){
-        TypeTrait.registerType(Player.class, Player::new);
-        TypeTrait.registerType(Fire.class, Fire::new);
-        TypeTrait.registerType(Puddle.class, Puddle::new);
-        TypeTrait.registerType(Bullet.class, Bullet::new);
-        TypeTrait.registerType(Lightning.class, Lightning::new);
     }
 }

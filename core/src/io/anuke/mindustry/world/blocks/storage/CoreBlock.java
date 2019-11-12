@@ -1,30 +1,30 @@
 package io.anuke.mindustry.world.blocks.storage;
 
-import io.anuke.annotations.Annotations.Loc;
-import io.anuke.annotations.Annotations.Remote;
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.EnumSet;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.func.*;
 import io.anuke.arc.graphics.g2d.*;
-import io.anuke.arc.math.Mathf;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.content.Mechs;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.traits.SpawnerTrait;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.traits.*;
 import io.anuke.mindustry.entities.type.*;
-import io.anuke.mindustry.gen.Call;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.graphics.Shaders;
-import io.anuke.mindustry.net.Net;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.type.ItemType;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.meta.BlockFlag;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.*;
+import io.anuke.mindustry.world.meta.*;
+import io.anuke.mindustry.world.modules.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class CoreBlock extends StorageBlock{
-    protected TextureRegion topRegion;
+    protected Mech mech = Mechs.starter;
 
     public CoreBlock(String name){
         super(name);
@@ -32,7 +32,10 @@ public class CoreBlock extends StorageBlock{
         solid = true;
         update = true;
         hasItems = true;
-        flags = EnumSet.of(BlockFlag.target, BlockFlag.producer);
+        flags = EnumSet.of(BlockFlag.core, BlockFlag.producer);
+        activeSound = Sounds.respawning;
+        activeSoundVolume = 1f;
+        layer = Layer.overlay;
     }
 
     @Remote(called = Loc.server)
@@ -42,25 +45,89 @@ public class CoreBlock extends StorageBlock{
         CoreEntity entity = tile.entity();
         Effects.effect(Fx.spawn, entity);
         entity.progress = 0;
-        entity.currentUnit = player;
-        entity.currentUnit.onRespawn(tile);
-        entity.currentUnit.applyImpulse(0, 8f);
-        entity.currentUnit = null;
+        entity.spawnPlayer = player;
+        entity.spawnPlayer.onRespawn(tile);
+        entity.spawnPlayer.applyImpulse(0, 8f);
+        entity.spawnPlayer = null;
+    }
+
+    @Override
+    public void setStats(){
+        super.setStats();
+
+        bars.add("capacity", e ->
+            new Bar(
+                () -> Core.bundle.format("bar.capacity", ui.formatAmount(((CoreEntity)e).storageCapacity)),
+                () -> Pal.items,
+                () -> e.items.total() / (float)(((CoreEntity)e).storageCapacity * content.items().count(i -> i.type == ItemType.material))
+            ));
+    }
+
+    @Override
+    public boolean acceptItem(Item item, Tile tile, Tile source){
+        return tile.entity.items.get(item) < getMaximumAccepted(tile, item);
     }
 
     @Override
     public int getMaximumAccepted(Tile tile, Item item){
-        return item.type == ItemType.material ? itemCapacity * state.teams.get(tile.getTeam()).cores.size : 0;
+        CoreEntity entity = tile.entity();
+        return item.type == ItemType.material ? entity.storageCapacity : 0;
     }
 
     @Override
     public void onProximityUpdate(Tile tile){
+        CoreEntity entity = tile.entity();
+
         for(Tile other : state.teams.get(tile.getTeam()).cores){
             if(other != tile){
-                tile.entity.items = other.entity.items;
+                entity.items = other.entity.items;
             }
         }
         state.teams.get(tile.getTeam()).cores.add(tile);
+
+        entity.storageCapacity = itemCapacity + entity.proximity().sum(e -> isContainer(e) ? e.block().itemCapacity : 0);
+        entity.proximity().each(this::isContainer, t -> {
+            t.entity.items = entity.items;
+            t.<StorageBlockEntity>entity().linkedCore = tile;
+        });
+
+        for(Tile other : state.teams.get(tile.getTeam()).cores){
+            if(other == tile) continue;
+            entity.storageCapacity += other.block().itemCapacity + other.entity.proximity().sum(e -> isContainer(e) ? e.block().itemCapacity : 0);
+        }
+
+        if(!world.isGenerating()){
+            for(Item item : content.items()){
+                entity.items.set(item, Math.min(entity.items.get(item), entity.storageCapacity));
+            }
+        }
+
+        for(Tile other : state.teams.get(tile.getTeam()).cores){
+            CoreEntity oe = other.entity();
+            oe.storageCapacity = entity.storageCapacity;
+        }
+    }
+
+    @Override
+    public void drawSelect(Tile tile){
+        Lines.stroke(1f, Pal.accent);
+        Cons<Tile> outline = t -> {
+            for(int i = 0; i < 4; i++){
+                Point2 p = Geometry.d8edge[i];
+                float offset = -Math.max(t.block().size - 1, 0) / 2f * tilesize;
+                Draw.rect("block-select", t.drawx() + offset * p.x, t.drawy() + offset * p.y, i * 90);
+            }
+        };
+        if(tile.entity.proximity().contains(e -> isContainer(e) && e.entity.items == tile.entity.items)){
+            outline.get(tile);
+        }
+        tile.entity.proximity().each(e -> isContainer(e) && e.entity.items == tile.entity.items, outline);
+        Draw.reset();
+    }
+
+
+    public boolean isContainer(Tile tile){
+        return tile.entity instanceof StorageBlockEntity;
     }
 
     @Override
@@ -70,90 +137,83 @@ public class CoreBlock extends StorageBlock{
 
     @Override
     public void removed(Tile tile){
+        int total = tile.entity.proximity().count(e -> e.entity.items == tile.entity.items);
+        float fract = 1f / total / state.teams.get(tile.getTeam()).cores.size;
+
+        tile.entity.proximity().each(e -> isContainer(e) && e.entity.items == tile.entity.items, t -> {
+            StorageBlockEntity ent = (StorageBlockEntity)t.entity;
+            ent.linkedCore = null;
+            ent.items = new ItemModule();
+            for(Item item : content.items()){
+                ent.items.set(item, (int)(fract * tile.entity.items.get(item)));
+            }
+        });
+
         state.teams.get(tile.getTeam()).cores.remove(tile);
 
         int max = itemCapacity * state.teams.get(tile.getTeam()).cores.size;
         for(Item item : content.items()){
             tile.entity.items.set(item, Math.min(tile.entity.items.get(item), max));
         }
+
+        for(Tile other : state.teams.get(tile.getTeam()).cores){
+            other.block().onProximityUpdate(other);
+        }
     }
 
     @Override
     public void placed(Tile tile){
+        super.placed(tile);
         state.teams.get(tile.getTeam()).cores.add(tile);
     }
 
     @Override
-    public void load(){
-        super.load();
-
-        topRegion = Core.atlas.find(name + "-top");
-    }
-
-    @Override
-    public void draw(Tile tile){
+    public void drawLayer(Tile tile){
         CoreEntity entity = tile.entity();
 
-        Draw.rect(region, tile.drawx(), tile.drawy());
-
-        if(Core.atlas.isFound(topRegion)){
-            Draw.alpha(entity.heat);
-            Draw.rect(topRegion, tile.drawx(), tile.drawy());
-            Draw.color();
-        }
-
-        if(entity.currentUnit != null){
-            Unit player = entity.currentUnit;
-
-            TextureRegion region = player.getIconRegion();
-
-            Shaders.build.region = region;
-            Shaders.build.progress = entity.progress;
-            Shaders.build.color.set(Pal.accent);
-            Shaders.build.time = -entity.time / 10f;
-
-            Draw.shader(Shaders.build, true);
-            Draw.rect(region, tile.drawx(), tile.drawy());
-            Draw.shader();
-
-            Draw.color(Pal.accent);
-
-            Lines.lineAngleCenter(
-                tile.drawx() + Mathf.sin(entity.time, 6f, Vars.tilesize / 3f * size),
-                tile.drawy(),
-                90,
-                size * Vars.tilesize / 2f);
-
-            Draw.reset();
+        if(entity.heat > 0.001f){
+            RespawnBlock.drawRespawn(tile, entity.heat, entity.progress, entity.time, entity.spawnPlayer, mech);
         }
     }
 
     @Override
     public void handleItem(Item item, Tile tile, Tile source){
-        if(Net.server() || !Net.active()) super.handleItem(item, tile, source);
+        if(net.server() || !net.active()){
+            super.handleItem(item, tile, source);
+            if(state.rules.tutorial){
+                Events.fire(new CoreItemDeliverEvent());
+            }
+        }
     }
 
     @Override
     public void update(Tile tile){
         CoreEntity entity = tile.entity();
 
-        if(entity.currentUnit != null){
-            if(!entity.currentUnit.isDead() || !entity.currentUnit.isAdded()){
-                entity.currentUnit = null;
+        if(entity.spawnPlayer != null){
+            if(!entity.spawnPlayer.isDead() || !entity.spawnPlayer.isAdded()){
+                entity.spawnPlayer = null;
                 return;
             }
 
-            entity.currentUnit.set(tile.drawx(), tile.drawy());
+            entity.spawnPlayer.set(tile.drawx(), tile.drawy());
             entity.heat = Mathf.lerpDelta(entity.heat, 1f, 0.1f);
             entity.time += entity.delta();
             entity.progress += 1f / state.rules.respawnTime * entity.delta();
 
             if(entity.progress >= 1f){
-                Call.onUnitRespawn(tile, entity.currentUnit);
+                Call.onUnitRespawn(tile, entity.spawnPlayer);
             }
         }else{
             entity.heat = Mathf.lerpDelta(entity.heat, 0f, 0.1f);
         }
+    }
+
+    @Override
+    public boolean shouldActiveSound(Tile tile){
+        CoreEntity entity = tile.entity();
+
+        return entity.spawnPlayer != null;
     }
 
     @Override
@@ -162,17 +222,23 @@ public class CoreBlock extends StorageBlock{
     }
 
     public class CoreEntity extends TileEntity implements SpawnerTrait{
-        public Player currentUnit;
-        float progress;
-        float time;
-        float heat;
+        protected Player spawnPlayer;
+        protected float progress;
+        protected float time;
+        protected float heat;
+        protected int storageCapacity;
+
+        @Override
+        public boolean hasUnit(Unit unit){
+            return unit == spawnPlayer;
+        }
 
         @Override
         public void updateSpawning(Player player){
-            if(!netServer.isWaitingForPlayers() && currentUnit == null){
-                currentUnit = player;
+            if(!netServer.isWaitingForPlayers() && spawnPlayer == null){
+                spawnPlayer = player;
                 progress = 0f;
-                player.mech = Mechs.starter;
+                player.mech = mech;
                 player.beginRespawning(this);
             }
         }

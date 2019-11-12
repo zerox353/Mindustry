@@ -1,14 +1,20 @@
 package io.anuke.mindustry.maps;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.StringMap;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.graphics.Texture;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.game.Rules;
-import io.anuke.mindustry.io.JsonIO;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.maps.filters.*;
+import io.anuke.mindustry.type.*;
 
-public class Map implements Comparable<Map>{
+import static io.anuke.mindustry.Vars.*;
+
+public class Map implements Comparable<Map>, Publishable{
     /** Whether this is a custom map. */
     public final boolean custom;
     /** Metadata. Author description, display name, etc. */
@@ -17,12 +23,18 @@ public class Map implements Comparable<Map>{
     public final FileHandle file;
     /** Format version. */
     public final int version;
+    /** Whether this map is managed, e.g. downloaded from the Steam workshop.*/
+    public boolean workshop;
     /** Map width/height, shorts. */
     public int width, height;
     /** Preview texture. */
     public Texture texture;
     /** Build that this map was created in. -1 = unknown or custom build. */
     public int build;
+    /** All teams present on this map.*/
+    public IntSet teams = new IntSet();
+    /** Number of enemy spawns on this map.*/
+    public int spawns = 0;
 
     public Map(FileHandle file, int width, int height, StringMap tags, boolean custom, int version, int build){
         this.custom = custom;
@@ -50,26 +62,56 @@ public class Map implements Comparable<Map>{
         return Core.settings.getInt("hiscore" + file.nameWithoutExtension(), 0);
     }
 
+    public Texture safeTexture(){
+        return texture == null ? Core.assets.get("sprites/error.png") : texture;
+    }
+
+    public FileHandle previewFile(){
+        return Vars.mapPreviewDirectory.child((workshop ? file.parent().name() : file.nameWithoutExtension()) + ".png");
+    }
+
+    public FileHandle cacheFile(){
+        return Vars.mapPreviewDirectory.child(workshop ? file.parent().name() + "-workshop-cache.dat" : file.nameWithoutExtension() + "-cache.dat");
+    }
+
     public void setHighScore(int score){
         Core.settings.put("hiscore" + file.nameWithoutExtension(), score);
         Vars.data.modified();
     }
 
-    /** This creates a new instance.*/
+    /** Returns the result of applying this map's rules to the specified gamemode.*/
+    public Rules applyRules(Gamemode mode){
+        //mode specific defaults have been applied
+        Rules out = new Rules();
+        mode.apply(out);
+
+        //now apply map-specific overrides
+        return rules(out);
+    }
+
+    /** This creates a new instance of Rules.*/
     public Rules rules(){
-        return JsonIO.read(Rules.class, tags.get("rules", "{}"));
+        return rules(new Rules());
     }
 
-    /** Whether this map has a core of the enemy 'wave' team. Default: true.
-     * Used for checking Attack mode validity.*/
-    public boolean hasEnemyCore(){
-        return tags.get("enemycore", "true").equals("true");
+    public Rules rules(Rules base){
+        try{
+            Rules result = JsonIO.read(Rules.class, base, tags.get("rules", "{}"));
+            if(result.spawns.isEmpty()) result.spawns = Vars.defaultWaves.get();
+            return result;
+        }catch(Exception e){
+            //error reading rules. ignore?
+            e.printStackTrace();
+            return new Rules();
+        }
     }
 
-    /** Whether this map has a core of any team except the default player team. Default: true.
-     * Used for checking PvP mode validity.*/
-    public boolean hasOtherCores(){
-        return tags.get("othercore", "true").equals("true");
+    /** Returns the generation filters that this map uses on load.*/
+    public Array<GenerateFilter> filters(){
+        if(tags.getInt("build", -1) < 83 && tags.getInt("build", -1) != -1 && tags.get("genfilters", "").isEmpty()){
+            return Array.with();
+        }
+        return maps.readFilters(tags.get("genfilters", ""));
     }
 
     public String author(){
@@ -93,13 +135,87 @@ public class Map implements Comparable<Map>{
     }
 
     @Override
-    public int compareTo(Map map){
-        int type = -Boolean.compare(custom, map.custom);
-        if(type != 0){
-            return type;
-        }else{
-            return name().compareTo(map.name());
+    public String getSteamID(){
+        return tags.get("steamid");
+    }
+
+    @Override
+    public void addSteamID(String id){
+        tags.put("steamid", id);
+
+        ui.editor.editor.getTags().put("steamid", id);
+        try{
+            ui.editor.save();
+        }catch(Exception e){
+            Log.err(e);
         }
+        Events.fire(new MapPublishEvent());
+    }
+
+    @Override
+    public void removeSteamID(){
+        tags.remove("steamid");
+
+        ui.editor.editor.getTags().remove("steamid");
+        try{
+            ui.editor.save();
+        }catch(Exception e){
+            Log.err(e);
+        }
+    }
+
+    @Override
+    public String steamTitle(){
+        return name();
+    }
+
+    @Override
+    public String steamDescription(){
+        return description();
+    }
+
+    @Override
+    public String steamTag(){
+        return "map";
+    }
+
+    @Override
+    public FileHandle createSteamFolder(String id){
+        FileHandle mapFile = tmpDirectory.child("map_" + id).child("map.msav");
+        file.copyTo(mapFile);
+        return mapFile.parent();
+    }
+
+    @Override
+    public FileHandle createSteamPreview(String id){
+        return previewFile();
+    }
+
+    @Override
+    public Array<String> extraTags(){
+        Gamemode mode = Gamemode.attack.valid(this) ? Gamemode.attack : Gamemode.survival;
+        return Array.with(mode.name());
+    }
+
+    @Override
+    public boolean prePublish(){
+        tags.put("author", player.name);
+        ui.editor.editor.getTags().put("author", tags.get("author"));
+        ui.editor.save();
+
+        return true;
+    }
+
+    @Override
+    public int compareTo(Map map){
+        int work = -Boolean.compare(workshop, map.workshop);
+        if(work != 0) return work;
+        int type = -Boolean.compare(custom, map.custom);
+        if(type != 0) return type;
+        int modes = Boolean.compare(Gamemode.pvp.valid(this), Gamemode.pvp.valid(map));
+        if(modes != 0) return modes;
+
+        return name().compareTo(map.name());
     }
 
     @Override

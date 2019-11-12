@@ -12,5 +12,8 @@ public enum ContentType{
     weather,
     effect,
     zone,
-    loadout
+    loadout,
+    typeid;
+
+    public static final ContentType[] all = values();
 }

@@ -1,16 +1,14 @@
 package power;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.blocks.power.PowerGenerator;
-import io.anuke.mindustry.world.blocks.power.PowerGraph;
-import io.anuke.mindustry.world.consumers.ConsumePower;
+import io.anuke.arc.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.power.*;
+import io.anuke.mindustry.world.consumers.*;
 import org.junit.jupiter.api.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
@@ -84,7 +82,7 @@ public class PowerTests extends PowerTestFixture{
             dynamicTest("06", () -> simulateDirectConsumptionWithBattery(0.0f, 10.0f, 0.0f, 0.0f, 0.0f, "No producer, empty battery")),
             dynamicTest("07", () -> simulateDirectConsumptionWithBattery(0.0f, 10.0f, 100.0f, 95.0f, 1.0f, "No producer, full battery")),
             dynamicTest("08", () -> simulateDirectConsumptionWithBattery(0.0f, 10.0f, 2.5f, 0.0f, 0.5f, "No producer, low battery")),
-            dynamicTest("09", () -> simulateDirectConsumptionWithBattery(5.0f, 10.0f, 5.0f, 0.0f, 1.0f, "Producer + Battery = Consumed")),
+            dynamicTest("09", () -> simulateDirectConsumptionWithBattery(5.0f, 10.0f, 5.0f, 2.5f, 1.0f, "Producer + Battery = Consumed")),
             };
         }
 

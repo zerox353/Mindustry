@@ -1,23 +1,20 @@
 package io.anuke.mindustry.world.blocks.defense;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.graphics.Blending;
-import io.anuke.arc.graphics.Color;
+import io.anuke.arc.*;
+import io.anuke.arc.func.*;
+import io.anuke.arc.graphics.*;
 import io.anuke.arc.graphics.g2d.*;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.content.Fx;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
 import io.anuke.mindustry.entities.*;
-import io.anuke.mindustry.entities.impl.BaseEntity;
 import io.anuke.mindustry.entities.traits.*;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.entities.type.BaseEntity;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.world.*;
 import io.anuke.mindustry.world.consumers.*;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
 
@@ -34,13 +31,12 @@ public class ForceProjector extends Block{
     protected float cooldownLiquid = 1.5f;
     protected float cooldownBrokenBase = 0.35f;
     protected float basePowerDraw = 0.2f;
-    protected float powerDamage = 0.1f;
     protected TextureRegion topRegion;
 
     private static Tile paramTile;
     private static ForceProjector paramBlock;
     private static ForceEntity paramEntity;
-    private static Consumer<AbsorbTrait> shieldConsumer = trait -> {
+    private static Cons<AbsorbTrait> shieldConsumer = trait -> {
         if(trait.canBeAbsorbed() && trait.getTeam() != paramTile.getTeam() && paramBlock.isInsideHexagon(trait.getX(), trait.getY(), paramBlock.realRadius(paramEntity) * 2f, paramTile.drawx(), paramTile.drawy())){
             trait.absorb();
             Effects.effect(Fx.absorb, trait);
@@ -61,6 +57,11 @@ public class ForceProjector extends Block{
     }
 
     @Override
+    public boolean outputsItems(){
+        return false;
+    }
+
+    @Override
     public void load(){
         super.load();
         topRegion = Core.atlas.find(name + "-top");
@@ -71,8 +72,6 @@ public class ForceProjector extends Block{
         super.setStats();
 
         stats.add(BlockStat.powerUse, basePowerDraw * 60f, StatUnit.powerSecond);
-        stats.add(BlockStat.powerDamage, powerDamage, StatUnit.powerUnits);
-
         stats.add(BlockStat.boostEffect, phaseRadiusBoost / tilesize, StatUnit.blocks);
     }
 
@@ -89,7 +88,6 @@ public class ForceProjector extends Block{
     @Override
     public void update(Tile tile){
         ForceEntity entity = tile.entity();
-        boolean cheat = tile.isEnemyCheat();
 
         if(entity.shield == null){
             entity.shield = new ShieldEntity(tile);
@@ -104,21 +102,15 @@ public class ForceProjector extends Block{
             entity.cons.trigger();
         }
 
-        entity.radscl = Mathf.lerpDelta(entity.radscl, entity.broken ? 0f : 1f, 0.05f);
+        entity.radscl = Mathf.lerpDelta(entity.radscl, entity.broken ? 0f : entity.warmup, 0.05f);
 
         if(Mathf.chance(Time.delta() * entity.buildup / breakage * 0.1f)){
             Effects.effect(Fx.reactorsmoke, tile.drawx() + Mathf.range(tilesize / 2f), tile.drawy() + Mathf.range(tilesize / 2f));
         }
 
-        //use cases:
-        // - There is enough power in the buffer, and there are no shots fired => Draw base power and keep shield up
-        // - There is enough power in the buffer, but not enough power to cope for shots being fired => Draw all power and break shield
-        // - There is enough power in the buffer and enough power to cope for shots being fired => Draw base power + additional power based on shots absorbed
-        // - There is not enough base power in the buffer => Draw all power and break shield
-        // - The generator is in the AI base and uses cheat mode => Only draw power from shots being absorbed
+        entity.warmup = Mathf.lerpDelta(entity.warmup, entity.power.satisfaction, 0.1f);
 
-        float relativePowerDraw = cheat ? 0f : 1f;
-
+/*
         if(entity.power.satisfaction < relativePowerDraw){
             entity.warmup = Mathf.lerpDelta(entity.warmup, 0f, 0.15f);
             entity.power.satisfaction = 0f;
@@ -127,7 +119,7 @@ public class ForceProjector extends Block{
             }
         }else{
             entity.warmup = Mathf.lerpDelta(entity.warmup, 1f, 0.1f);
-        }
+        }*/
 
         if(entity.buildup > 0){
             float scale = !entity.broken ? cooldownNormal : cooldownBrokenBase;
@@ -140,7 +132,7 @@ public class ForceProjector extends Block{
             entity.buildup -= Time.delta() * scale;
         }
 
-        if(entity.broken && entity.buildup <= 0 && entity.warmup >= 0.9f){
+        if(entity.broken && entity.buildup <= 0){
             entity.broken = false;
         }
 
@@ -252,7 +244,7 @@ public class ForceProjector extends Block{
         public void drawOver(){
             if(entity.hit <= 0f) return;
 
-            Draw.color(Color.WHITE);
+            Draw.color(Color.white);
             Draw.alpha(entity.hit);
             Fill.poly(x, y, 6, realRadius(entity));
             Draw.color();

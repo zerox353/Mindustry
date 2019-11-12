@@ -1,24 +1,26 @@
 package io.anuke.mindustry.world.blocks.defense;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Graphics.Cursor;
-import io.anuke.arc.Graphics.Cursor.SystemCursor;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.geom.Rectangle;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Effects.Effect;
-import io.anuke.mindustry.entities.Units;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.Graphics.*;
+import io.anuke.arc.Graphics.Cursor.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.Effects.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.world.*;
 
 import java.io.*;
+
+import static io.anuke.mindustry.Vars.*;
 
 public class Door extends Wall{
     protected final Rectangle rect = new Rectangle();
 
+    protected int timerToggle = timers++;
     protected Effect openfx = Fx.dooropen;
     protected Effect closefx = Fx.doorclose;
 
@@ -29,6 +31,23 @@ public class Door extends Wall{
         solid = false;
         solidifes = true;
         consumesTap = true;
+    }
+
+    @Remote(called = Loc.server)
+    public static void onDoorToggle(Player player, Tile tile, boolean open){
+        DoorEntity entity = tile.entity();
+        if(entity != null){
+            entity.open = open;
+            Door door = (Door)tile.block();
+
+            pathfinder.updateTile(tile);
+            if(!entity.open){
+                Effects.effect(door.openfx, tile.drawx(), tile.drawy());
+            }else{
+                Effects.effect(door.closefx, tile.drawx(), tile.drawy());
+            }
+            Sounds.door.at(tile);
+        }
     }
 
     @Override
@@ -63,16 +82,11 @@ public class Door extends Wall{
     public void tapped(Tile tile, Player player){
         DoorEntity entity = tile.entity();
 
-        if(Units.anyEntities(tile) && entity.open){
+        if((Units.anyEntities(tile) && entity.open) || !tile.entity.timer.get(timerToggle, 30f)){
             return;
         }
 
-        entity.open = !entity.open;
-        if(!entity.open){
-            Effects.effect(closefx, tile.drawx(), tile.drawy());
-        }else{
-            Effects.effect(openfx, tile.drawx(), tile.drawy());
-        }
+        Call.onDoorToggle(null, tile, !entity.open);
     }
 
     @Override

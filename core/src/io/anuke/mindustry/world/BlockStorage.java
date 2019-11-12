@@ -2,13 +2,15 @@ package io.anuke.mindustry.world;
 
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.math.geom.Vector2;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.effect.Puddle;
 import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.game.UnlockableContent;
+import io.anuke.mindustry.entities.type.Unit;
+import io.anuke.mindustry.ctype.UnlockableContent;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.Liquid;
 import io.anuke.mindustry.world.consumers.Consumers;
@@ -26,7 +28,6 @@ public abstract class BlockStorage extends UnlockableContent{
 
     public int itemCapacity = 10;
     public float liquidCapacity = 10f;
-    public float liquidFlowFactor = 4.9f;
 
     public final BlockStats stats = new BlockStats();
     public final BlockBars bars = new BlockBars();
@@ -37,6 +38,10 @@ public abstract class BlockStorage extends UnlockableContent{
     }
 
     public boolean shouldConsume(Tile tile){
+        return true;
+    }
+
+    public boolean productionValid(Tile tile){
         return true;
     }
 
@@ -74,11 +79,11 @@ public abstract class BlockStorage extends UnlockableContent{
     }
 
     public boolean acceptItem(Item item, Tile tile, Tile source){
-        return consumes.itemFilters[item.id] && tile.entity.items.get(item) < getMaximumAccepted(tile, item);
+        return consumes.itemFilters.get(item.id) && tile.entity.items.get(item) < getMaximumAccepted(tile, item);
     }
 
     public boolean acceptLiquid(Tile tile, Tile source, Liquid liquid, float amount){
-        return hasLiquids && tile.entity.liquids.get(liquid) + amount < liquidCapacity && consumes.liquidfilters[liquid.id];
+        return hasLiquids && tile.entity.liquids.get(liquid) + amount < liquidCapacity && consumes.liquidfilters.get(liquid.id);
     }
 
     public void handleLiquid(Tile tile, Tile source, Liquid liquid, float amount){
@@ -94,7 +99,9 @@ public abstract class BlockStorage extends UnlockableContent{
             Tile other = proximity.get((i + dump) % proximity.size);
             Tile in = Edges.getFacingEdge(tile, other);
 
-            if(other.getTeam() == tile.getTeam() && other.block().hasLiquids && canDumpLiquid(tile, other, liquid)){
+            other = other.block().getLiquidDestination(other, tile);
+
+            if(other.getTeam() == tile.getTeam() && other.block().hasLiquids && canDumpLiquid(tile, other, liquid) && other.entity.liquids != null){
                 float ofract = other.entity.liquids.get(liquid) / other.block().liquidCapacity;
                 float fract = tile.entity.liquids.get(liquid) / liquidCapacity;
 
@@ -120,6 +127,7 @@ public abstract class BlockStorage extends UnlockableContent{
         if(next == null) return 0;
 
         next = next.link();
+        next = next.block().getLiquidDestination(next, tile);
 
         if(next.getTeam() == tile.getTeam() && next.block().hasLiquids && tile.entity.liquids.get(liquid) > 0f){
 
@@ -155,6 +163,10 @@ public abstract class BlockStorage extends UnlockableContent{
             tile.entity.liquids.remove(liquid, leakAmount);
         }
         return 0;
+    }
+
+    public Tile getLiquidDestination(Tile tile, Tile from){
+        return tile;
     }
 
     /**
@@ -238,8 +250,14 @@ public abstract class BlockStorage extends UnlockableContent{
         return true;
     }
 
-    /** Returns whether this block's inventory has space and is ready for production. */
-    public boolean canProduce(Tile tile){
-        return true;
+    /** Try offloading an item to a nearby container in its facing direction. Returns true if success. */
+    public boolean offloadDir(Tile tile, Item item){
+        Tile other = tile.getNearby(tile.rotation());
+        if(other != null) other = other.link();
+        if(other != null && other.getTeam() == tile.getTeam() && other.block().acceptItem(item, other, tile)){
+            other.block().handleItem(item, other, tile);
+            return true;
+        }
+        return false;
     }
 }

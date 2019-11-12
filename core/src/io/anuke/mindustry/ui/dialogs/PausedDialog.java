@@ -1,15 +1,16 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.input.KeyCode;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.net.Net;
+import io.anuke.arc.*;
+import io.anuke.arc.input.*;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.gen.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class PausedDialog extends FloatingDialog{
     private SaveDialog save = new SaveDialog();
     private LoadDialog load = new LoadDialog();
+    private boolean wasClient = false;
 
     public PausedDialog(){
         super("$menu");
@@ -47,65 +48,75 @@ public class PausedDialog extends FloatingDialog{
             }
             cont.addButton("$settings", ui.settings::show);
 
-            if(!world.isZone() && !state.isEditor()){
+            if(!state.rules.tutorial){
+                if(!world.isZone() && !state.isEditor()){
+                    cont.row();
+                    cont.addButton("$savegame", save::show);
+                    cont.addButton("$loadgame", load::show).disabled(b -> net.active());
+                }
+
                 cont.row();
-                cont.addButton("$savegame", save::show);
-                cont.addButton("$loadgame", load::show).disabled(b -> Net.active());
+
+                cont.addButton("$hostserver", () -> {
+                    if(net.server() && steam){
+                        platform.inviteFriends();
+                    }else{
+                        if(steam){
+                            ui.host.runHost();
+                        }else{
+                            ui.host.show();
+                        }
+                    }
+                }).disabled(b -> !((steam && net.server()) || !net.active())).colspan(2).width(dw * 2 + 20f).update(e -> e.setText(net.server() && steam ? "$invitefriends" : "$hostserver"));
             }
 
             cont.row();
 
-            if(!state.isEditor()){
-                cont.addButton("$hostserver", ui.host::show).disabled(b -> Net.active()).colspan(2).width(dw * 2 + 20f);
-                cont.row();
-            }
-
-            cont.addButton("$quit", () -> {
-                ui.showConfirm("$confirm", "$quit.confirm", () -> {
-                    if(Net.client()) netClient.disconnectQuietly();
-                    runExitSave();
-                    hide();
-                });
-            }).colspan(2).width(dw + 10f);
+            cont.addButton("$quit", this::showQuitConfirm).colspan(2).width(dw + 10f).update(s -> s.setText(control.saves.getCurrent() != null && control.saves.getCurrent().isAutosave() ? "$save.quit" : "$quit"));
 
         }else{
-            cont.defaults().size(120f).pad(5);
-            float isize = 14f * 4;
-
-            cont.addRowImageTextButton("$back", "icon-play-2", isize, this::hide);
-            cont.addRowImageTextButton("$settings", "icon-tools", isize, ui.settings::show);
+            cont.defaults().size(130f).pad(5);
+            cont.addRowImageTextButton("$back", Icon.play2, this::hide);
+            cont.addRowImageTextButton("$settings", Icon.tools, ui.settings::show);
 
             if(!world.isZone() && !state.isEditor()){
-                cont.addRowImageTextButton("$save", "icon-save", isize, save::show);
+                cont.addRowImageTextButton("$save", Icon.save, save::show);
 
                 cont.row();
 
-                cont.addRowImageTextButton("$load", "icon-load", isize, load::show).disabled(b -> Net.active());
+                cont.addRowImageTextButton("$load", Icon.load, load::show).disabled(b -> net.active());
             }else{
                 cont.row();
             }
 
-            if(!state.isEditor()){
-                cont.addRowImageTextButton("$hostserver.mobile", "icon-host", isize, ui.host::show).disabled(b -> Net.active());
-            }
-            cont.addRowImageTextButton("$quit", "icon-quit", isize, () -> {
-                ui.showConfirm("$confirm", "$quit.confirm", () -> {
-                    if(Net.client()) netClient.disconnectQuietly();
-                    runExitSave();
-                    hide();
-                });
-            });
+            cont.addRowImageTextButton("$hostserver.mobile", Icon.host, ui.host::show).disabled(b -> net.active());
+
+            cont.addRowImageTextButton("$quit", Icon.quit, this::showQuitConfirm).update(s -> s.setText(control.saves.getCurrent() != null && control.saves.getCurrent().isAutosave() ? "$save.quit" : "$quit"));
         }
     }
 
+    void showQuitConfirm(){
+        ui.showConfirm("$confirm", state.rules.tutorial ? "$quit.confirm.tutorial" : "$quit.confirm", () -> {
+            if(state.rules.tutorial){
+                Core.settings.put("playedtutorial", true);
+                Core.settings.save();
+            }
+            wasClient = net.client();
+            if(net.client()) netClient.disconnectQuietly();
+            runExitSave();
+            hide();
+        });
+    }
+
     public void runExitSave(){
-        if(state.isEditor()){
+        if(state.isEditor() && !wasClient){
             ui.editor.resumeEditing();
             return;
         }
 
-        if(control.saves.getCurrent() == null || !control.saves.getCurrent().isAutosave()){
+        if(control.saves.getCurrent() == null || !control.saves.getCurrent().isAutosave() || state.rules.tutorial || wasClient){
             state.set(State.menu);
+            logic.reset();
             return;
         }
 
@@ -114,9 +125,10 @@ public class PausedDialog extends FloatingDialog{
                 control.saves.getCurrent().save();
             }catch(Throwable e){
                 e.printStackTrace();
-                ui.showError("[accent]" + Core.bundle.get("savefail"));
+                ui.showException("[accent]" + Core.bundle.get("savefail"), e);
             }
             state.set(State.menu);
+            logic.reset();
         });
     }
 }

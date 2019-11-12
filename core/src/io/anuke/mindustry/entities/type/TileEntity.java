@@ -7,21 +7,19 @@ import io.anuke.arc.collection.ObjectSet;
 import io.anuke.arc.math.geom.Point2;
 import io.anuke.arc.math.geom.Vector2;
 import io.anuke.arc.util.*;
+import io.anuke.arc.util.ArcAnnotate.*;
 import io.anuke.mindustry.entities.EntityGroup;
-import io.anuke.mindustry.entities.bullet.Bullet;
-import io.anuke.mindustry.entities.impl.BaseEntity;
 import io.anuke.mindustry.entities.traits.HealthTrait;
 import io.anuke.mindustry.entities.traits.TargetTrait;
+import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.game.EventType.BlockDestroyEvent;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.gen.Call;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.world.*;
 import io.anuke.mindustry.world.modules.*;
 
 import java.io.*;
 
-import static io.anuke.mindustry.Vars.tileGroup;
-import static io.anuke.mindustry.Vars.world;
+import static io.anuke.mindustry.Vars.*;
 
 public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
     public static final float timeToSleep = 60f * 4; //4 seconds to fall asleep
@@ -45,6 +43,7 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
     private boolean dead = false;
     private boolean sleeping;
     private float sleepTime;
+    private @Nullable SoundLoop sound;
 
     @Remote(called = Loc.server, unreliable = true)
     public static void onTileDamage(Tile tile, float health){
@@ -52,7 +51,7 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
             tile.entity.health = health;
 
             if(tile.entity.damaged()){
-                world.indexer.notifyTileDamaged(tile.entity);
+                indexer.notifyTileDamaged(tile.entity);
             }
         }
     }
@@ -69,6 +68,9 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
         x = tile.drawx();
         y = tile.drawy();
         block = tile.block();
+        if(block.activeSound != Sounds.none){
+            sound = new SoundLoop(block.activeSound, block.activeSoundVolume);
+        }
 
         health = block.health;
         timer = new Interval(block.timers);
@@ -168,12 +170,8 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
         }
 
         if(preHealth >= maxHealth() - 0.00001f && health < maxHealth() && world != null){ //when just damaged
-            world.indexer.notifyTileDamaged(this);
+            indexer.notifyTileDamaged(this);
         }
-    }
-
-    public boolean damaged(){
-        return health < maxHealth() - 0.00001f;
     }
 
     public Tile getTile(){
@@ -208,14 +206,12 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
             if(other == null) continue;
             if(other.entity == null || !(other.interactable(tile.getTeam()))) continue;
 
-            other.block().onProximityUpdate(other);
-
-            tmpTiles.add(other);
-
             //add this tile to proximity of nearby tiles
             if(!other.entity.proximity.contains(tile, true)){
                 other.entity.proximity.add(tile);
             }
+
+            tmpTiles.add(other);
         }
 
         //using a set to prevent duplicates
@@ -225,10 +221,26 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
 
         block.onProximityAdded(tile);
         block.onProximityUpdate(tile);
+
+        for(Tile other : tmpTiles){
+            other.block().onProximityUpdate(other);
+        }
     }
 
     public Array<Tile> proximity(){
         return proximity;
+    }
+
+    /** Tile configuration. Defaults to 0. Used for block rebuilding. */
+    public int config(){
+        return 0;
+    }
+
+    @Override
+    public void removed(){
+        if(sound != null){
+            sound.stop();
+        }
     }
 
     @Override
@@ -257,6 +269,7 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
             dead = true;
 
             Events.fire(new BlockDestroyEvent(tile));
+            block.breakSound.at(tile);
             block.onDestroyed(tile);
             world.removeBlock(tile);
             remove();
@@ -283,6 +296,14 @@ public class TileEntity extends BaseEntity implements TargetTrait, HealthTrait{
         if(health <= 0){
             onDeath();
             return; //no need to update anymore
+        }
+
+        if(sound != null){
+            sound.update(x, y, block.shouldActiveSound(tile));
+        }
+
+        if(block.idleSound != Sounds.none && block.shouldIdleSound(tile)){
+            loops.play(block.idleSound, this, block.idleSoundVolume);
         }
 
         Block previous = block;

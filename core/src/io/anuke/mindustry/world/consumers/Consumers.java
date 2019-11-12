@@ -1,6 +1,7 @@
 package io.anuke.mindustry.world.consumers;
 
-import io.anuke.arc.function.Predicate;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.func.Boolf;
 import io.anuke.arc.util.Structs;
 import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.entities.type.TileEntity;
@@ -12,8 +13,8 @@ public class Consumers{
     private Consume[] map = new Consume[ConsumeType.values().length];
     private Consume[] results, optionalResults;
 
-    public final boolean[] itemFilters = new boolean[Vars.content.items().size];
-    public final boolean[] liquidfilters = new boolean[Vars.content.liquids().size];
+    public final Bits itemFilters = new Bits(Vars.content.items().size);
+    public final Bits liquidfilters = new Bits(Vars.content.liquids().size);
 
     public void init(){
         results = Structs.filter(Consume.class, map, m -> m != null);
@@ -47,7 +48,7 @@ public class Consumers{
     }
 
     /** Creates a consumer which only consumes power when the condition is met. */
-    public ConsumePower powerCond(float usage, Predicate<TileEntity> cons){
+    public ConsumePower powerCond(float usage, Boolf<TileEntity> cons){
         return add(new ConditionalConsumePower(usage, cons));
     }
 

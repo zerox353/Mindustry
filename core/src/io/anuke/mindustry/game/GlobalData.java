@@ -1,15 +1,19 @@
 package io.anuke.mindustry.game;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
+import io.anuke.arc.*;
 import io.anuke.arc.collection.*;
-import io.anuke.mindustry.Vars;
-import io.anuke.mindustry.content.Items;
-import io.anuke.mindustry.game.EventType.UnlockEvent;
+import io.anuke.arc.files.*;
+import io.anuke.arc.util.io.*;
+import io.anuke.mindustry.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.ctype.UnlockableContent;
+import io.anuke.mindustry.game.EventType.*;
 import io.anuke.mindustry.type.*;
 
-import static io.anuke.mindustry.Vars.content;
-import static io.anuke.mindustry.Vars.state;
+import java.io.*;
+import java.util.zip.*;
+
+import static io.anuke.mindustry.Vars.*;
 
 /** Stores player unlocks. Clientside only. */
 public class GlobalData{
@@ -31,6 +35,44 @@ public class GlobalData{
         });
     }
 
+    public void exportData(FileHandle file) throws IOException{
+        Array<FileHandle> files = new Array<>();
+        files.add(Core.settings.getSettingsFile());
+        files.addAll(customMapDirectory.list());
+        files.addAll(saveDirectory.list());
+        files.addAll(screenshotDirectory.list());
+        files.addAll(modDirectory.list());
+        files.addAll(schematicDirectory.list());
+        String base = Core.settings.getDataDirectory().path();
+
+        try(OutputStream fos = file.write(false, 2048); ZipOutputStream zos = new ZipOutputStream(fos)){
+            for(FileHandle add : files){
+                if(add.isDirectory()) continue;
+                zos.putNextEntry(new ZipEntry(add.path().substring(base.length())));
+                Streams.copyStream(add.read(), zos);
+                zos.closeEntry();
+            }
+
+        }
+    }
+
+    public void importData(FileHandle file){
+        FileHandle dest = Core.files.local("zipdata.zip");
+        file.copyTo(dest);
+        FileHandle zipped = new ZipFileHandle(dest);
+
+        FileHandle base = Core.settings.getDataDirectory();
+        if(!zipped.child("settings.bin").exists()){
+            throw new IllegalArgumentException("Not valid save data.");
+        }
+
+        //purge existing tmp data, keep everything else
+        tmpDirectory.deleteDirectory();
+
+        zipped.walk(f -> f.copyTo(base.child(f.path())));
+        dest.delete();
+    }
+
     public void modified(){
         modified = true;
     }
@@ -40,22 +82,36 @@ public class GlobalData{
     }
 
     public void addItem(Item item, int amount){
-        unlockContent(item);
+        if(amount > 0){
+            unlockContent(item);
+        }
         modified = true;
         items.getAndIncrement(item, 0, amount);
         state.stats.itemsDelivered.getAndIncrement(item, 0, amount);
     }
 
+    public boolean hasItems(Array<ItemStack> stacks){
+        return !stacks.contains(s -> items.get(s.item, 0) < s.amount);
+    }
+
     public boolean hasItems(ItemStack[] stacks){
         for(ItemStack stack : stacks){
-            if(items.get(stack.item, 0) < stack.amount){
+            if(!has(stack.item, stack.amount)){
                 return false;
             }
         }
+
         return true;
     }
 
     public void removeItems(ItemStack[] stacks){
+        for(ItemStack stack : stacks){
+            items.getAndIncrement(stack.item, 0, -stack.amount);
+        }
+        modified = true;
+    }
+
+    public void removeItems(Array<ItemStack> stacks){
         for(ItemStack stack : stacks){
             items.getAndIncrement(stack.item, 0, -stack.amount);
         }
@@ -105,6 +161,7 @@ public class GlobalData{
 
     @SuppressWarnings("unchecked")
     public void load(){
+        items.clear();
         unlocked = Core.settings.getObject("unlocks", ObjectMap.class, ObjectMap::new);
         for(Item item : Vars.content.items()){
             items.put(item, Core.settings.getInt("item-" + item.name, 0));

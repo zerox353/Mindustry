@@ -36,11 +36,13 @@ task dist(type: Jar){
     from{ configurations.compile.collect{ zipTree(it) } }
     from files(project.assetsDir)
     exclude("sprites/**")
+    exclude("music/**")
+    exclude("sounds/**")
     exclude("fonts/**")
+    exclude("zones/**")
     exclude("com/badlogic/gdx/**")
+    exclude("icons/**")
     exclude("bundles/**")
-
-    writeVersion()
 
     manifest{
         attributes 'Main-Class': project.mainClassName
@@ -49,7 +51,7 @@ task dist(type: Jar){
 
 task dzip(type: Zip){
     from getServerFolder()
-    archiveName "$appName-server-${getVersionString()}.zip"
+    archiveName "${generateDeployName('server')}.zip"
     destinationDir(file("../deploy/"))
 
     finalizedBy 'cleanup'

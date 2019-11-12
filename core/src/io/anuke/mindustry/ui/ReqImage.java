@@ -1,17 +1,17 @@
 package io.anuke.mindustry.ui;
 
-import io.anuke.arc.function.BooleanProvider;
+import io.anuke.arc.func.Boolp;
 import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.scene.Element;
 import io.anuke.arc.scene.ui.Image;
 import io.anuke.arc.scene.ui.layout.Stack;
-import io.anuke.arc.scene.ui.layout.Unit;
+import io.anuke.arc.scene.ui.layout.Scl;
 import io.anuke.mindustry.graphics.Pal;
 
 public class ReqImage extends Stack{
-    private final BooleanProvider valid;
+    private final Boolp valid;
 
-    public ReqImage(Element image, BooleanProvider valid){
+    public ReqImage(Element image, Boolp valid){
         this.valid = valid;
         add(image);
         add(new Element(){
@@ -21,7 +21,7 @@ public class ReqImage extends Stack{
 
             @Override
             public void draw(){
-                Lines.stroke(Unit.dp.scl(2f), Pal.removeBack);
+                Lines.stroke(Scl.scl(2f), Pal.removeBack);
                 Lines.line(x, y - 2f + height, x + width, y - 2f);
                 Draw.color(Pal.remove);
                 Lines.line(x, y + height, x + width, y);
@@ -30,7 +30,7 @@ public class ReqImage extends Stack{
         });
     }
 
-    public ReqImage(TextureRegion region, BooleanProvider valid){
+    public ReqImage(TextureRegion region, Boolp valid){
         this(new Image(region), valid);
     }
 

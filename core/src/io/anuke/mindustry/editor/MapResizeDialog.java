@@ -1,15 +1,16 @@
 package io.anuke.mindustry.editor;
 
-import io.anuke.arc.function.IntPositionConsumer;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.mindustry.ui.dialogs.FloatingDialog;
+import io.anuke.arc.func.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.ui.dialogs.*;
 
 public class MapResizeDialog extends FloatingDialog{
     private static final int minSize = 50, maxSize = 500, increment = 50;
     int width, height;
 
-    public MapResizeDialog(MapEditor editor, IntPositionConsumer cons){
+    public MapResizeDialog(MapEditor editor, Intc2 cons){
         super("$editor.resizemap");
         shown(() -> {
             cont.clear();
@@ -28,7 +29,7 @@ public class MapResizeDialog extends FloatingDialog{
                         height = move(height, -1);
                 }).size(60f);
 
-                table.table("button", t -> t.label(() -> (w ? width : height) + "")).width(200);
+                table.table(Tex.button, t -> t.label(() -> (w ? width : height) + "")).width(200);
 
                 table.addButton(">", () -> {
                     if(w)
@@ -45,8 +46,8 @@ public class MapResizeDialog extends FloatingDialog{
 
         buttons.defaults().size(200f, 50f);
         buttons.addButton("$cancel", this::hide);
-        buttons.addButton("$editor.resize", () -> {
-            cons.accept(width, height);
+        buttons.addButton("$ok", () -> {
+            cons.get(width, height);
             hide();
         });
     }

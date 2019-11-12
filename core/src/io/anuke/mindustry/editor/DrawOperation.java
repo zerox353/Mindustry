@@ -9,10 +9,14 @@ import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.blocks.Floor;
 
 import static io.anuke.mindustry.Vars.content;
-import static io.anuke.mindustry.Vars.world;
 
 public class DrawOperation{
+    private MapEditor editor;
     private LongArray array = new LongArray();
+
+    public DrawOperation(MapEditor editor) {
+        this.editor = editor;
+    }
 
     public boolean isEmpty(){
         return array.isEmpty();
@@ -22,23 +26,25 @@ public class DrawOperation{
         array.add(op);
     }
 
-    public void undo(MapEditor editor){
+    public void undo(){
         for(int i = array.size - 1; i >= 0; i--){
-            long l = array.get(i);
-            array.set(i, TileOp.get(TileOp.x(l), TileOp.y(l), TileOp.type(l), get(editor.tile(TileOp.x(l), TileOp.y(l)), TileOp.type(l))));
-            set(editor, editor.tile(TileOp.x(l), TileOp.y(l)), TileOp.type(l), TileOp.value(l));
+            updateTile(i);
         }
     }
 
-    public void redo(MapEditor editor){
+    public void redo(){
         for(int i = 0; i < array.size; i++){
-            long l = array.get(i);
-            array.set(i, TileOp.get(TileOp.x(l), TileOp.y(l), TileOp.type(l), get(editor.tile(TileOp.x(l), TileOp.y(l)), TileOp.type(l))));
-            set(editor, editor.tile(TileOp.x(l), TileOp.y(l)), TileOp.type(l), TileOp.value(l));
+            updateTile(i);
         }
     }
 
-    short get(Tile tile, byte type){
+    private void updateTile(int i) {
+        long l = array.get(i);
+        array.set(i, TileOp.get(TileOp.x(l), TileOp.y(l), TileOp.type(l), getTile(editor.tile(TileOp.x(l), TileOp.y(l)), TileOp.type(l))));
+        setTile(editor.tile(TileOp.x(l), TileOp.y(l)), TileOp.type(l), TileOp.value(l));
+    }
+
+    short getTile(Tile tile, byte type){
         if(type == OpType.floor.ordinal()){
             return tile.floorID();
         }else if(type == OpType.block.ordinal()){
@@ -53,13 +59,13 @@ public class DrawOperation{
         throw new IllegalArgumentException("Invalid type.");
     }
 
-    void set(MapEditor editor, Tile tile, byte type, short to){
+    void setTile(Tile tile, byte type, short to){
         editor.load(() -> {
             if(type == OpType.floor.ordinal()){
                 tile.setFloor((Floor)content.block(to));
             }else if(type == OpType.block.ordinal()){
                 Block block = content.block(to);
-                world.setBlock(tile, block, tile.getTeam(), tile.rotation());
+                tile.setBlock(block, tile.getTeam(), tile.rotation());
             }else if(type == OpType.rotation.ordinal()){
                 tile.rotation(to);
             }else if(type == OpType.team.ordinal()){

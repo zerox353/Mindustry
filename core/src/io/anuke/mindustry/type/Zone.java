@@ -1,40 +1,37 @@
 package io.anuke.mindustry.type;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.Events;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.function.Supplier;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.util.Structs;
-import io.anuke.mindustry.content.Loadouts;
-import io.anuke.mindustry.game.EventType.ZoneConfigureCompleteEvent;
-import io.anuke.mindustry.game.EventType.ZoneRequireCompleteEvent;
-import io.anuke.mindustry.game.Rules;
-import io.anuke.mindustry.game.UnlockableContent;
-import io.anuke.mindustry.maps.generators.Generator;
-import io.anuke.mindustry.world.Block;
-
-import java.util.Arrays;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.func.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.ArcAnnotate.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.ctype.UnlockableContent;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.game.Objectives.*;
+import io.anuke.mindustry.maps.generators.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class Zone extends UnlockableContent{
-    public final Generator generator;
-    public Block[] blockRequirements = {};
-    public ZoneRequirement[] zoneRequirements = {};
-    public Item[] resources = {};
-    public Supplier<Rules> rules = Rules::new;
+    public @NonNull Generator generator;
+    public @NonNull Objective configureObjective = new ZoneWave(this, 15);
+    public Array<Objective> requirements = new Array<>();
+    //TODO autogenerate
+    public Array<Item> resources = new Array<>();
+
+    public Cons<Rules> rules = rules -> {};
     public boolean alwaysUnlocked;
     public int conditionWave = Integer.MAX_VALUE;
-    public int configureWave = 15;
     public int launchPeriod = 10;
-    public Loadout loadout = Loadouts.basicShard;
+    public Schematic loadout = Loadouts.basicShard;
+    public TextureRegion preview;
 
-    protected ItemStack[] baseLaunchCost = {};
+    protected Array<ItemStack> baseLaunchCost = new Array<>();
     protected Array<ItemStack> startingItems = new Array<>();
-    protected ItemStack[] launchCost = null;
+    protected Array<ItemStack> launchCost;
 
     private Array<ItemStack> defaultStartingItems = new Array<>();
 
@@ -43,15 +40,34 @@ public class Zone extends UnlockableContent{
         this.generator = generator;
     }
 
-    public boolean isBossWave(int wave){
-        return wave % configureWave == 0 && wave > 0;
+    public Zone(String name){
+        this(name, new MapGenerator(name));
+    }
+
+    @Override
+    public void load(){
+        preview = Core.atlas.find("zone-" + name, Core.atlas.find(name + "-zone"));
+    }
+
+    public Rules getRules(){
+        if(generator instanceof MapGenerator){
+            return ((MapGenerator)generator).getMap().rules();
+        }else{
+            Rules rules = new Rules();
+            this.rules.get(rules);
+            return rules;
+        }
     }
 
     public boolean isLaunchWave(int wave){
         return metCondition() && wave % launchPeriod == 0;
     }
 
-    public ItemStack[] getLaunchCost(){
+    public boolean canUnlock(){
+        return data.isUnlocked(this) || !requirements.contains(r -> !r.complete());
+    }
+
+    public Array<ItemStack> getLaunchCost(){
         if(launchCost == null){
             updateLaunchCost();
         }
@@ -67,22 +83,45 @@ public class Zone extends UnlockableContent{
         defaultStartingItems.each(stack -> startingItems.add(new ItemStack(stack.item, stack.amount)));
     }
 
+    public boolean hasLaunched(){
+        return Core.settings.getBool(name + "-launched", false);
+    }
+
+    public void setLaunched(){
+        updateObjectives(() -> {
+            Core.settings.put(name + "-launched", true);
+            data.modified();
+        });
+    }
+
     public void updateWave(int wave){
         int value = Core.settings.getInt(name + "-wave", 0);
+
         if(value < wave){
-            Core.settings.put(name + "-wave", wave);
-            data.modified();
+            updateObjectives(() -> {
+                Core.settings.put(name + "-wave", wave);
+                data.modified();
+            });
+        }
+    }
 
-            for(Zone zone : content.zones()){
-                ZoneRequirement req = Structs.find(zone.zoneRequirements, f -> f.zone == this);
-                if(req != null && wave == req.wave + 1){
-                    Events.fire(new ZoneRequireCompleteEvent(zone, this));
-                }
-            }
+    public void updateObjectives(Runnable closure){
+        Array<ZoneObjective> incomplete = content.zones()
+            .map(z -> z.requirements).<Objective>flatten()
+            .select(o -> o.zone() == this && !o.complete())
+            .as(ZoneObjective.class);
 
-            if(wave == configureWave + 1){
-                Events.fire(new ZoneConfigureCompleteEvent(this));
+        boolean wasConfig = configureObjective.complete();
+
+        closure.run();
+        for(ZoneObjective objective : incomplete){
+            if(objective.complete()){
+                Events.fire(new ZoneRequireCompleteEvent(objective.zone, content.zones().find(z -> z.requirements.contains(objective)), objective));
             }
+        }
+
+        if(!wasConfig && configureObjective.complete()){
+            Events.fire(new ZoneConfigureCompleteEvent(this));
         }
     }
 
@@ -90,14 +129,15 @@ public class Zone extends UnlockableContent{
         return Core.settings.getInt(name + "-wave", 0);
     }
 
-    public boolean isCompleted(){
+    /** @return whether initial conditions to launch are met. */
+    public boolean isLaunchMet(){
         return bestWave() >= conditionWave;
     }
 
     public void updateLaunchCost(){
         Array<ItemStack> stacks = new Array<>();
 
-        Consumer<ItemStack> adder = stack -> {
+        Cons<ItemStack> adder = stack -> {
             for(ItemStack other : stacks){
                 if(other.item == stack.item){
                     other.amount += stack.amount;
@@ -107,32 +147,37 @@ public class Zone extends UnlockableContent{
             stacks.add(new ItemStack(stack.item, stack.amount));
         };
 
-        for(ItemStack stack : baseLaunchCost) adder.accept(stack);
-        for(ItemStack stack : startingItems) adder.accept(stack);
+        for(ItemStack stack : baseLaunchCost) adder.get(stack);
+        for(ItemStack stack : startingItems) adder.get(stack);
 
         for(ItemStack stack : stacks){
             if(stack.amount < 0) stack.amount = 0;
         }
 
         stacks.sort();
-        launchCost = stacks.toArray(ItemStack.class);
+        launchCost = stacks;
         Core.settings.putObject(name + "-starting-items", startingItems);
         data.modified();
     }
 
     /** Whether this zone has met its condition; if true, the player can leave. */
     public boolean metCondition(){
-        return state.wave >= conditionWave;
+        //players can't leave in attack mode.
+        return state.wave >= conditionWave && !state.rules.attackMode;
     }
 
     public boolean canConfigure(){
-        return bestWave() >= configureWave;
+        return configureObjective.complete();
     }
 
     @Override
     public void init(){
+        if(generator instanceof MapGenerator && mod != null){
+            ((MapGenerator)generator).removePrefix(mod.name);
+        }
+
         generator.init(loadout);
-        Arrays.sort(resources);
+        resources.sort();
 
         for(ItemStack stack : startingItems){
             defaultStartingItems.add(new ItemStack(stack.item, stack.amount));
@@ -161,11 +206,6 @@ public class Zone extends UnlockableContent{
     }
 
     @Override
-    public TextureRegion getContentIcon(){
-        return null;
-    }
-
-    @Override
     public String localizedName(){
         return Core.bundle.get("zone." + name + ".name");
     }
@@ -173,24 +213,6 @@ public class Zone extends UnlockableContent{
     @Override
     public ContentType getContentType(){
         return ContentType.zone;
-    }
-
-    public static class ZoneRequirement{
-        public final Zone zone;
-        public final int wave;
-
-        public ZoneRequirement(Zone zone, int wave){
-            this.zone = zone;
-            this.wave = wave;
-        }
-
-        public static ZoneRequirement[] with(Object... objects){
-            ZoneRequirement[] out = new ZoneRequirement[objects.length / 2];
-            for(int i = 0; i < objects.length; i += 2){
-                out[i / 2] = new ZoneRequirement((Zone)objects[i], (Integer)objects[i + 1]);
-            }
-            return out;
-        }
     }
 
 }

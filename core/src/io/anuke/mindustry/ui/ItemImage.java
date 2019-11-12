@@ -1,11 +1,9 @@
 package io.anuke.mindustry.ui;
 
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.scene.ui.Image;
-import io.anuke.arc.scene.ui.layout.Stack;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.mindustry.type.Item.Icon;
-import io.anuke.mindustry.type.ItemStack;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.mindustry.type.*;
 
 public class ItemImage extends Stack{
 
@@ -17,8 +15,15 @@ public class ItemImage extends Stack{
         add(t);
     }
 
+    public ItemImage(TextureRegion region){
+        Table t = new Table().left().bottom();
+
+        add(new Image(region));
+        add(t);
+    }
+
     public ItemImage(ItemStack stack){
-        add(new Image(stack.item.icon(Icon.large)));
+        add(new Image(stack.item.icon(Cicon.medium)));
 
         if(stack.amount != 0){
             Table t = new Table().left().bottom();

@@ -9,6 +9,7 @@ public enum BlockStat{
     health(StatCategory.general),
     size(StatCategory.general),
     buildTime(StatCategory.general),
+    buildCost(StatCategory.general),
 
     itemCapacity(StatCategory.items),
     itemsMoved(StatCategory.items),
@@ -20,6 +21,7 @@ public enum BlockStat{
     powerUse(StatCategory.power),
     powerDamage(StatCategory.power),
     powerRange(StatCategory.power),
+    powerConnections(StatCategory.power),
     basePowerGeneration(StatCategory.power),
 
     input(StatCategory.crafting),
@@ -39,6 +41,7 @@ public enum BlockStat{
     powerShot(StatCategory.shooting),
     targetsAir(StatCategory.shooting),
     targetsGround(StatCategory.shooting),
+    damage(StatCategory.shooting),
     ammo(StatCategory.shooting),
 
     booster(StatCategory.optional),

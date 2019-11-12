@@ -2,7 +2,7 @@ package io.anuke.mindustry.world.blocks.units;
 
 import io.anuke.annotations.Annotations.Loc;
 import io.anuke.annotations.Annotations.Remote;
-import io.anuke.arc.Core;
+import io.anuke.arc.*;
 import io.anuke.arc.collection.EnumSet;
 import io.anuke.arc.graphics.g2d.*;
 import io.anuke.arc.math.Mathf;
@@ -10,12 +10,13 @@ import io.anuke.mindustry.Vars;
 import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.EventType.*;
 import io.anuke.mindustry.gen.Call;
 import io.anuke.mindustry.graphics.Pal;
 import io.anuke.mindustry.graphics.Shaders;
-import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.ui.Bar;
+import io.anuke.mindustry.ui.Cicon;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 import io.anuke.mindustry.world.consumers.ConsumeItems;
@@ -23,9 +24,10 @@ import io.anuke.mindustry.world.consumers.ConsumeType;
 import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
+import static io.anuke.mindustry.Vars.*;
 
 public class UnitFactory extends Block{
-    protected UnitType type;
+    protected UnitType unitType;
     protected float produceTime = 1000f;
     protected float launchVelocity = 0f;
     protected TextureRegion topRegion;
@@ -54,12 +56,13 @@ public class UnitFactory extends Block{
         Effects.shake(2f, 3f, entity);
         Effects.effect(Fx.producesmoke, tile.drawx(), tile.drawy());
 
-        if(!Net.client()){
-            BaseUnit unit = factory.type.create(tile.getTeam());
+        if(!net.client()){
+            BaseUnit unit = factory.unitType.create(tile.getTeam());
             unit.setSpawner(tile);
             unit.set(tile.drawx() + Mathf.range(4), tile.drawy() + Mathf.range(4));
             unit.add();
             unit.velocity().y = factory.launchVelocity;
+            Events.fire(new UnitCreateEvent(unit));
         }
     }
 
@@ -119,7 +122,7 @@ public class UnitFactory extends Block{
     @Override
     public void draw(Tile tile){
         UnitFactoryEntity entity = tile.entity();
-        TextureRegion region = type.iconRegion;
+        TextureRegion region = unitType.icon(Cicon.full);
 
         Draw.rect(name, tile.drawx(), tile.drawy());
 
@@ -127,7 +130,7 @@ public class UnitFactory extends Block{
         Shaders.build.progress = entity.buildTime / produceTime;
         Shaders.build.color.set(Pal.accent);
         Shaders.build.color.a = entity.speedScl;
-        Shaders.build.time = -entity.time / 10f;
+        Shaders.build.time = -entity.time / 20f;
 
         Draw.shader(Shaders.build);
         Draw.rect(region, tile.drawx(), tile.drawy());
@@ -137,7 +140,7 @@ public class UnitFactory extends Block{
         Draw.alpha(entity.speedScl);
 
         Lines.lineAngleCenter(
-        tile.drawx() + Mathf.sin(entity.time, 6f, Vars.tilesize / 2f * size - 2f),
+        tile.drawx() + Mathf.sin(entity.time, 20f, Vars.tilesize / 2f * size - 2f),
         tile.drawy(),
         90,
         size * Vars.tilesize - 4f);
@@ -167,7 +170,7 @@ public class UnitFactory extends Block{
             entity.buildTime = 0f;
 
             Call.onUnitFactorySpawn(tile, entity.spawned + 1);
-            useContent(tile, type);
+            useContent(tile, unitType);
 
             entity.cons.trigger();
         }
@@ -183,7 +186,7 @@ public class UnitFactory extends Block{
     }
 
     @Override
-    public boolean canProduce(Tile tile){
+    public boolean shouldConsume(Tile tile){
         UnitFactoryEntity entity = tile.entity();
         return entity.spawned < maxSpawn;
     }

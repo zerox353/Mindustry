@@ -1,36 +1,41 @@
 package io.anuke.mindustry.entities.bullet;
 
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Fill;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.math.geom.Point2;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.effect.Fire;
-import io.anuke.mindustry.entities.effect.Puddle;
-import io.anuke.mindustry.type.Liquid;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.util.ArcAnnotate.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.effect.*;
+import io.anuke.mindustry.entities.type.Bullet;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.world.*;
 
-import static io.anuke.mindustry.Vars.tilesize;
-import static io.anuke.mindustry.Vars.world;
+import static io.anuke.mindustry.Vars.*;
 
 public class LiquidBulletType extends BulletType{
-    Liquid liquid;
+    @NonNull Liquid liquid;
 
-    public LiquidBulletType(Liquid liquid){
+    public LiquidBulletType(@Nullable Liquid liquid){
         super(3.5f, 0);
-        this.liquid = liquid;
+
+        if(liquid != null){
+            this.liquid = liquid;
+            this.status = liquid.effect;
+        }
 
         lifetime = 74f;
-        status = liquid.effect;
         statusDuration = 90f;
         despawnEffect = Fx.none;
         hitEffect = Fx.hitLiquid;
+        smokeEffect = Fx.none;
         shootEffect = Fx.none;
         drag = 0.009f;
         knockback = 0.55f;
+    }
+
+    public LiquidBulletType(){
+        this(null);
     }
 
     @Override
@@ -54,7 +59,7 @@ public class LiquidBulletType extends BulletType{
 
     @Override
     public void draw(Bullet b){
-        Draw.color(liquid.color, Color.WHITE, b.fout() / 100f + Mathf.randomSeedRange(b.id, 0.1f));
+        Draw.color(liquid.color, Color.white, b.fout() / 100f);
 
         Fill.circle(b.x, b.y, 0.5f + b.fout() * 2.5f);
     }

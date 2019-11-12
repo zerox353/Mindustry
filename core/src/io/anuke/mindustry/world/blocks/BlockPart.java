@@ -1,5 +1,7 @@
 package io.anuke.mindustry.world.blocks;
 
+import io.anuke.mindustry.type.Item;
+import io.anuke.mindustry.type.Liquid;
 import io.anuke.mindustry.world.Block;
 import io.anuke.mindustry.world.Tile;
 
@@ -29,8 +31,31 @@ public class BlockPart extends Block{
     }
 
     @Override
+    public boolean acceptItem(Item item, Tile tile, Tile source){
+        return tile.link().block().acceptItem(item, tile.link(), source);
+    }
+
+    @Override
+    public void handleItem(Item item, Tile tile, Tile source){
+        tile.link().block().handleItem(item, tile.link(), source);
+    }
+
+    @Override
+    public void handleLiquid(Tile tile, Tile source, Liquid liquid, float amount){
+        Block block = tile.link().block();
+        block.handleLiquid(tile.link(), source, liquid, amount);
+    }
+
+    @Override
+    public boolean acceptLiquid(Tile tile, Tile source, Liquid liquid, float amount){
+        Block block = tile.link().block();
+        return block.hasLiquids && block.acceptLiquid(tile.link(), source, liquid, amount);
+    }
+
+    @Override
     public Tile linked(Tile tile){
-        return tile.getNearby(-dx, -dy);
+        Tile out = tile.getNearby(-dx, -dy);
+        return out == null ? tile : out;
     }
 
     @Override

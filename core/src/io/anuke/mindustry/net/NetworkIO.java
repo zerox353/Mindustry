@@ -1,18 +1,16 @@
 package io.anuke.mindustry.net;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.entities.Entities;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.game.Rules;
-import io.anuke.mindustry.game.Version;
-import io.anuke.mindustry.io.JsonIO;
-import io.anuke.mindustry.io.SaveIO;
+import io.anuke.arc.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.core.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.io.*;
 import io.anuke.mindustry.maps.Map;
 
 import java.io.*;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
+import java.nio.*;
+import java.util.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -30,6 +28,7 @@ public class NetworkIO{
             stream.writeInt(player.id);
             player.write(stream);
 
+            SaveIO.getSaveWriter().writeContentHeader(stream);
             SaveIO.getSaveWriter().writeMap(stream);
         }catch(IOException e){
             throw new RuntimeException(e);
@@ -46,16 +45,19 @@ public class NetworkIO{
             state.wave = stream.readInt();
             state.wavetime = stream.readFloat();
 
-            Entities.clear();
+            entities.clear();
             int id = stream.readInt();
             player.resetNoAdd();
             player.read(stream);
             player.resetID(id);
             player.add();
 
+            SaveIO.getSaveWriter().readContentHeader(stream);
             SaveIO.getSaveWriter().readMap(stream, world.context);
         }catch(IOException e){
             throw new RuntimeException(e);
+        }finally{
+            content.setTemporaryMapper(null);
         }
     }
 
@@ -72,8 +74,9 @@ public class NetworkIO{
         buffer.putInt(state.wave);
         buffer.putInt(Version.build);
         writeString(buffer, Version.type);
-        //TODO additional information:
-        // - gamemode ID/name (just pick the closest one?)
+
+        buffer.put((byte)Gamemode.bestFit(state.rules).ordinal());
+        buffer.putInt(netServer.admins.getPlayerLimit());
         return buffer;
     }
 
@@ -84,13 +87,15 @@ public class NetworkIO{
         int wave = buffer.getInt();
         int version = buffer.getInt();
         String vertype = readString(buffer);
+        Gamemode gamemode = Gamemode.all[buffer.get()];
+        int limit = buffer.getInt();
 
-        return new Host(host, hostAddress, map, wave, players, version, vertype);
+        return new Host(host, hostAddress, map, wave, players, version, vertype, gamemode, limit);
     }
 
     private static void writeString(ByteBuffer buffer, String string, int maxlen){
         byte[] bytes = string.getBytes(charset);
-        //truncating this way may lead to wierd encoding errors at the ends of strings...
+        //todo truncating this way may lead to wierd encoding errors at the ends of strings...
         if(bytes.length > maxlen){
             bytes = Arrays.copyOfRange(bytes, 0, maxlen);
         }

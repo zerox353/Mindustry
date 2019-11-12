@@ -1,33 +1,29 @@
 package io.anuke.mindustry;
 
-import android.Manifest;
-import android.content.Context;
-import android.content.Intent;
-import android.content.pm.ActivityInfo;
-import android.content.pm.PackageManager;
-import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.provider.Settings.Secure;
-import android.telephony.TelephonyManager;
-import io.anuke.arc.Core;
-import io.anuke.arc.backends.android.surfaceview.AndroidApplication;
-import io.anuke.arc.backends.android.surfaceview.AndroidApplicationConfiguration;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.scene.ui.layout.Unit;
-import io.anuke.arc.util.Strings;
-import io.anuke.arc.util.serialization.Base64Coder;
-import io.anuke.mindustry.core.Platform;
-import io.anuke.mindustry.game.Saves.SaveSlot;
-import io.anuke.mindustry.io.SaveIO;
-import io.anuke.mindustry.net.Net;
-import io.anuke.mindustry.ui.dialogs.FileChooser;
-import io.anuke.mindustry.net.ArcNetClient;
-import io.anuke.mindustry.net.ArcNetServer;
+import android.*;
+import android.app.*;
+import android.content.*;
+import android.content.pm.*;
+import android.net.*;
+import android.os.Build.*;
+import android.os.*;
+import android.provider.Settings.*;
+import android.telephony.*;
+import io.anuke.arc.*;
+import io.anuke.arc.backends.android.surfaceview.*;
+import io.anuke.arc.files.*;
+import io.anuke.arc.func.Cons;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.serialization.*;
+import io.anuke.mindustry.game.Saves.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.mod.*;
+import io.anuke.mindustry.ui.dialogs.*;
 
 import java.io.*;
-import java.util.ArrayList;
+import java.lang.System;
+import java.util.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -35,14 +31,16 @@ public class AndroidLauncher extends AndroidApplication{
     public static final int PERMISSION_REQUEST_CODE = 1;
     boolean doubleScaleTablets = true;
     FileChooser chooser;
+    Runnable permCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState){
         super.onCreate(savedInstanceState);
-        AndroidApplicationConfiguration config = new AndroidApplicationConfiguration();
-        config.useImmersiveMode = true;
-        config.depth = 0;
-        Platform.instance = new Platform(){
+        if(doubleScaleTablets && isTablet(this.getContext())){
+            Scl.setAddition(0.5f);
+        }
+
+        initialize(new ClientLauncher(){
 
             @Override
             public void hide(){
@@ -72,13 +70,48 @@ public class AndroidLauncher extends AndroidApplication{
             }
 
             @Override
-            public void showFileChooser(String text, String content, Consumer<FileHandle> cons, boolean open, String filetype){
-                chooser = new FileChooser(text, file -> file.extension().equalsIgnoreCase(filetype), open, cons);
-                if(Build.VERSION.SDK_INT < Build.VERSION_CODES.M || (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
-                checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED)){
-                    chooser.show();
-                    chooser = null;
-                }else{
+            public void showFileChooser(boolean open, String extension, Cons<FileHandle> cons){
+                if(VERSION.SDK_INT >= VERSION_CODES.Q){
+                    Intent intent = new Intent(open ? Intent.ACTION_OPEN_DOCUMENT : Intent.ACTION_CREATE_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType(extension.equals("zip") ? "application/zip" : "*/*");
+                    addResultListener(i -> startActivityForResult(intent, i), (code, in) -> {
+                        if(code == Activity.RESULT_OK && in != null && in.getData() != null){
+                            Uri uri = in.getData();
+
+                            if(uri.getPath().contains("(invalid)")) return;
+
+                            Core.app.post(() -> Core.app.post(() -> cons.get(new FileHandle(uri.getPath()){
+                                @Override
+                                public InputStream read(){
+                                    try{
+                                        return getContentResolver().openInputStream(uri);
+                                    }catch(IOException e){
+                                        throw new ArcRuntimeException(e);
+                                    }
+                                }
+
+                                @Override
+                                public OutputStream write(boolean append){
+                                    try{
+                                        return getContentResolver().openOutputStream(uri);
+                                    }catch(IOException e){
+                                        throw new ArcRuntimeException(e);
+                                    }
+                                }
+                            })));
+                        }
+                    });
+                }else if(VERSION.SDK_INT >= VERSION_CODES.M && !(checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+                    checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED)){
+                    chooser = new FileChooser(open ? "$open" : "$save", file -> file.extension().equalsIgnoreCase(extension), open, file -> {
+                        if(!open){
+                            cons.get(file.parent().child(file.nameWithoutExtension() + "." + extension));
+                        }else{
+                            cons.get(file);
+                        }
+                    });
+
                     ArrayList<String> perms = new ArrayList<>();
                     if(checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED){
                         perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
@@ -87,6 +120,8 @@ public class AndroidLauncher extends AndroidApplication{
                         perms.add(Manifest.permission.READ_EXTERNAL_STORAGE);
                     }
                     requestPermissions(perms.toArray(new String[0]), PERMISSION_REQUEST_CODE);
+                }else{
+                    super.showFileChooser(open, extension, cons);
                 }
             }
 
@@ -97,23 +132,15 @@ public class AndroidLauncher extends AndroidApplication{
 
             @Override
             public void endForceLandscape(){
-                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR);
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_USER);
             }
 
-            @Override
-            public boolean canDonate(){
-                return true;
-            }
-        };
-
-        if(doubleScaleTablets && isTablet(this.getContext())){
-            Unit.dp.addition = 0.5f;
-        }
-
-        config.hideStatusBar = true;
-        Net.setClientProvider(new ArcNetClient());
-        Net.setServerProvider(new ArcNetServer());
-        initialize(new Mindustry(), config);
+        }, new AndroidApplicationConfiguration(){{
+            useImmersiveMode = true;
+            depth = 0;
+            hideStatusBar = true;
+            errorHandler = ModCrashHandler::handle;
+        }});
         checkFiles(getIntent());
     }
 
@@ -124,7 +151,11 @@ public class AndroidLauncher extends AndroidApplication{
                 if(i != PackageManager.PERMISSION_GRANTED) return;
             }
             if(chooser != null){
-                chooser.show();
+                Core.app.post(chooser::show);
+            }
+            if(permCallback != null){
+                Core.app.post(permCallback);
+                permCallback = null;
             }
         }
     }
@@ -147,7 +178,7 @@ public class AndroidLauncher extends AndroidApplication{
                 InputStream inStream;
                 if(myFile != null) inStream = new FileInputStream(myFile);
                 else inStream = getContentResolver().openInputStream(uri);
-                Core.app.post(() -> {
+                Core.app.post(() -> Core.app.post(() -> {
                     if(save){ //open save
                         System.out.println("Opening save.");
                         FileHandle file = Core.files.local("temp-save." + saveExtension);
@@ -157,10 +188,10 @@ public class AndroidLauncher extends AndroidApplication{
                                 SaveSlot slot = control.saves.importSave(file);
                                 ui.load.runLoadSave(slot);
                             }catch(IOException e){
-                                ui.showError(Core.bundle.format("save.import.fail", Strings.parseException(e, false)));
+                                ui.showException("$save.import.fail", e);
                             }
                         }else{
-                            ui.showError("$save.import.invalid");
+                            ui.showErrorMessage("$save.import.invalid");
                         }
                     }else if(map){ //open map
                         FileHandle file = Core.files.local("temp-map." + mapExtension);
@@ -173,7 +204,7 @@ public class AndroidLauncher extends AndroidApplication{
                             ui.editor.beginEditMap(file);
                         });
                     }
-                });
+                }));
             }
         }catch(IOException e){
             e.printStackTrace();

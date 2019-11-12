@@ -3,15 +3,15 @@ package io.anuke.mindustry.ui.dialogs;
 import io.anuke.arc.Core;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.scene.ui.Dialog;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.graphics.Pal;
 
-import static io.anuke.mindustry.Vars.discordURL;
-import static io.anuke.mindustry.Vars.ui;
+import static io.anuke.mindustry.Vars.*;
 
 public class DiscordDialog extends Dialog{
 
     public DiscordDialog(){
-        super("", "dialog");
+        super("");
 
         float h = 70f;
 
@@ -20,17 +20,17 @@ public class DiscordDialog extends Dialog{
         Color color = Color.valueOf("7289da");
 
         cont.table(t -> {
-            t.background("button").margin(0);
+            t.background(Tex.button).margin(0);
 
             t.table(img -> {
-                img.addImage("white").height(h - 5).width(40f).color(color);
+                img.addImage().height(h - 5).width(40f).color(color);
                 img.row();
-                img.addImage("white").height(5).width(40f).color(color.cpy().mul(0.8f, 0.8f, 0.8f, 1f));
+                img.addImage().height(5).width(40f).color(color.cpy().mul(0.8f, 0.8f, 0.8f, 1f));
             }).expandY();
 
             t.table(i -> {
-                i.background("button");
-                i.addImage("icon-discord").size(14 * 3);
+                i.background(Tex.button);
+                i.addImage(Icon.discord);
             }).size(h).left();
 
             t.add("$discord").color(Pal.accent).growX().padLeft(10f);
@@ -40,12 +40,12 @@ public class DiscordDialog extends Dialog{
 
         buttons.addButton("$back", this::hide);
         buttons.addButton("$copylink", () -> {
-            Core.app.getClipboard().setContents(discordURL);
+            Core.app.setClipboardText(discordURL);
         });
         buttons.addButton("$openlink", () -> {
             if(!Core.net.openURI(discordURL)){
-                ui.showError("$linkfail");
-                Core.app.getClipboard().setContents(discordURL);
+                ui.showErrorMessage("$linkfail");
+                Core.app.setClipboardText(discordURL);
             }
         });
     }

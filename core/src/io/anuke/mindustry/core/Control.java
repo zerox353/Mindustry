@@ -1,31 +1,35 @@
 package io.anuke.mindustry.core;
 
 import io.anuke.arc.*;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.GL20;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureAtlas;
-import io.anuke.arc.input.KeyCode;
-import io.anuke.arc.scene.ui.Dialog;
-import io.anuke.arc.scene.ui.TextField;
+import io.anuke.arc.assets.*;
+import io.anuke.arc.audio.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.ui.*;
 import io.anuke.arc.util.*;
-import io.anuke.mindustry.core.GameState.State;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.type.Player;
-import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.core.GameState.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.type.*;
 import io.anuke.mindustry.game.EventType.*;
-import io.anuke.mindustry.gen.Call;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.input.*;
 import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.net.Net;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.ui.dialogs.FloatingDialog;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.mindustry.ui.dialogs.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.storage.*;
 
-import java.io.IOException;
-import java.nio.IntBuffer;
+import java.io.*;
+import java.text.*;
+import java.util.*;
 
-import static io.anuke.arc.Core.scene;
+import static io.anuke.arc.Core.*;
+import static io.anuke.mindustry.Vars.net;
 import static io.anuke.mindustry.Vars.*;
 
 /**
@@ -34,55 +38,33 @@ import static io.anuke.mindustry.Vars.*;
  * Should <i>not</i> handle any logic-critical state.
  * This class is not created in the headless server.
  */
-public class Control implements ApplicationListener{
-    public final Saves saves;
+public class Control implements ApplicationListener, Loadable{
+    public Saves saves;
+    public MusicControl music;
+    public Tutorial tutorial;
+    public InputHandler input;
 
     private Interval timer = new Interval(2);
     private boolean hiscore = false;
     private boolean wasPaused = false;
-    private InputHandler input;
 
     public Control(){
-        IntBuffer buf = BufferUtils.newIntBuffer(1);
-        Core.gl.glGetIntegerv(GL20.GL_MAX_TEXTURE_SIZE, buf);
-        int maxSize = buf.get(0);
-
         saves = new Saves();
-        data = new GlobalData();
-
-        Core.input.setCatch(KeyCode.BACK, true);
-
-        Effects.setShakeFalloff(10000f);
-
-        content.initialize(Content::init);
-        Core.atlas = new TextureAtlas(maxSize < 2048 ? "sprites/sprites_fallback.atlas" : "sprites/sprites.atlas");
-        Draw.scl = 1f / Core.atlas.find("scale_marker").getWidth();
-        content.initialize(Content::load);
-
-        data.load();
-
-        Core.settings.setAppName(appName);
-        Core.settings.defaults(
-            "ip", "localhost",
-            "color-0", Color.rgba8888(playerColors[8]),
-            "color-1", Color.rgba8888(playerColors[11]),
-            "color-2", Color.rgba8888(playerColors[13]),
-            "color-3", Color.rgba8888(playerColors[9]),
-            "name", "",
-            "lastBuild", 0
-        );
-
-        createPlayer();
-
-        saves.load();
+        tutorial = new Tutorial();
+        music = new MusicControl();
 
         Events.on(StateChangeEvent.class, event -> {
             if((event.from == State.playing && event.to == State.menu) || (event.from == State.menu && event.to != State.menu)){
-                Time.runTask(5f, Platform.instance::updateRPC);
+                Time.runTask(5f, platform::updateRPC);
+                for(Sound sound : assets.getAll(Sound.class, new Array<>())){
+                    sound.stop();
+                }
             }
         });
 
         Events.on(PlayEvent.class, event -> {
+            player.setTeam(state.rules.pvp ? netServer.assignTeam(player, playerGroup.all()) : defaultTeam);
+            player.setDead(true);
             player.add();
 
             state.set(State.playing);
@@ -90,9 +72,9 @@ public class Control implements ApplicationListener{
 
         Events.on(WorldLoadEvent.class, event -> {
             Core.app.post(() -> Core.app.post(() -> {
-                if(Net.active() && player.getClosestCore() != null){
+                if(net.active() && player.getClosestCore() != null){
                     //set to closest core since that's where the player will probably respawn; prevents camera jumps
-                    Core.camera.position.set(player.getClosestCore());
+                    Core.camera.position.set(player.isDead() ? player.getClosestCore() : player);
                 }else{
                     //locally, set to player position since respawning occurs immediately
                     Core.camera.position.set(player);
@@ -102,6 +84,7 @@ public class Control implements ApplicationListener{
 
         Events.on(ResetEvent.class, event -> {
             player.reset();
+            tutorial.reset();
 
             hiscore = false;
 
@@ -113,6 +96,8 @@ public class Control implements ApplicationListener{
                 hiscore = true;
                 world.getMap().setHighScore(state.wave);
             }
+
+            Sounds.wave.play();
         });
 
         Events.on(GameOverEvent.class, event -> {
@@ -120,9 +105,9 @@ public class Control implements ApplicationListener{
             Effects.shake(5, 6, Core.camera.position.x, Core.camera.position.y);
             //the restart dialog can show info for any number of scenarios
             Call.onGameOver(event.winner);
-            if(state.rules.zone != null){
+            if(state.rules.zone != null && !net.client()){
                 //remove zone save on game over
-                if(saves.getZoneSlot() != null){
+                if(saves.getZoneSlot() != null && !state.rules.tutorial){
                     saves.getZoneSlot().delete();
                 }
             }
@@ -130,12 +115,12 @@ public class Control implements ApplicationListener{
 
         //autohost for pvp maps
         Events.on(WorldLoadEvent.class, event -> {
-            if(state.rules.pvp && !Net.active()){
+            if(state.rules.pvp && !net.active()){
                 try{
-                    Net.host(port);
+                    net.host(port);
                     player.isAdmin = true;
                 }catch(IOException e){
-                    ui.showError(Core.bundle.format("server.error", Strings.parseException(e, false)));
+                    ui.showException("$server.error", e);
                     Core.app.post(() -> state.set(State.menu));
                 }
             }
@@ -166,12 +151,56 @@ public class Control implements ApplicationListener{
         });
 
         Events.on(ZoneRequireCompleteEvent.class, e -> {
-            ui.hudfrag.showToast(Core.bundle.format("zone.requirement.complete", state.wave, e.zone.localizedName));
+            if(e.objective.display() != null){
+                ui.hudfrag.showToast(Core.bundle.format("zone.requirement.complete", e.zoneForMet.localizedName, e.objective.display()));
+            }
         });
 
         Events.on(ZoneConfigureCompleteEvent.class, e -> {
-            ui.hudfrag.showToast(Core.bundle.format("zone.config.complete", e.zone.configureWave));
+            if(e.zone.configureObjective.display() != null){
+                ui.hudfrag.showToast(Core.bundle.format("zone.config.unlocked", e.zone.configureObjective.display()));
+            }
         });
+
+        Events.on(Trigger.newGame, () -> {
+            TileEntity core = player.getClosestCore();
+
+            if(core == null) return;
+
+            app.post(() -> ui.hudfrag.showLand());
+            renderer.zoomIn(Fx.coreLand.lifetime);
+            app.post(() -> Effects.effect(Fx.coreLand, core.x, core.y, 0, core.block));
+            Time.run(Fx.coreLand.lifetime, () -> {
+                Effects.effect(Fx.launch, core);
+                Effects.shake(5f, 5f, core);
+            });
+        });
+
+        Events.on(UnitDestroyEvent.class, e -> {
+            if(e.unit instanceof BaseUnit && world.isZone()){
+                data.unlockContent(((BaseUnit)e.unit).getType());
+            }
+        });
+    }
+
+    @Override
+    public void loadAsync(){
+        Draw.scl = 1f / Core.atlas.find("scale_marker").getWidth();
+
+        Core.input.setCatch(KeyCode.BACK, true);
+
+        data.load();
+
+        Core.settings.defaults(
+        "ip", "localhost",
+        "color-0", Color.rgba8888(playerColors[8]),
+        "name", "",
+        "lastBuild", 0
+        );
+
+        createPlayer();
+
+        saves.load();
     }
 
     void createPlayer(){
@@ -191,27 +220,41 @@ public class Control implements ApplicationListener{
             player.add();
         }
 
-        Core.input.addProcessor(input);
+        Events.on(ClientLoadEvent.class, e -> input.add());
     }
 
-    public InputHandler input(){
-        return input;
+    public void setInput(InputHandler newInput){
+        Block block = input.block;
+        boolean added = Core.input.getInputProcessors().contains(input);
+        input.remove();
+        this.input = newInput;
+        newInput.block = block;
+        if(added){
+            newInput.add();
+        }
     }
 
     public void playMap(Map map, Rules rules){
         ui.loadAnd(() -> {
             logic.reset();
-            world.loadMap(map);
+            world.loadMap(map, rules);
             state.rules = rules;
+            state.rules.zone = null;
+            state.rules.editor = false;
             logic.play();
+            if(settings.getBool("savecreate") && !world.isInvalidMap()){
+                control.saves.addSave(map.name() + " " + new SimpleDateFormat("MMM dd h:mm", Locale.getDefault()).format(new Date()));
+            }
+            Events.fire(Trigger.newGame);
         });
     }
 
     public void playZone(Zone zone){
         ui.loadAnd(() -> {
             logic.reset();
+            net.reset();
             world.loadGenerator(zone.generator);
-            state.rules = zone.rules.get();
+            zone.rules.get(state.rules);
             state.rules.zone = zone;
             for(Tile core : state.teams.get(defaultTeam).cores){
                 for(ItemStack stack : zone.getStartingItems()){
@@ -221,6 +264,60 @@ public class Control implements ApplicationListener{
             state.set(State.playing);
             control.saves.zoneSave();
             logic.play();
+            Events.fire(Trigger.newGame);
+        });
+    }
+
+    public void playTutorial(){
+        Zone zone = Zones.groundZero;
+        ui.loadAnd(() -> {
+            logic.reset();
+            net.reset();
+
+            world.beginMapLoad();
+
+            world.createTiles(zone.generator.width, zone.generator.height);
+            zone.generator.generate(world.getTiles());
+
+            Tile coreb = null;
+
+            out:
+            for(int x = 0; x < world.width(); x++){
+                for(int y = 0; y < world.height(); y++){
+                    if(world.rawTile(x, y).block() instanceof CoreBlock){
+                        coreb = world.rawTile(x, y);
+                        break out;
+                    }
+                }
+            }
+
+            Geometry.circle(coreb.x, coreb.y, 10, (cx, cy) -> {
+                Tile tile = world.ltile(cx, cy);
+                if(tile != null && tile.getTeam() == defaultTeam && !(tile.block() instanceof CoreBlock)){
+                    world.removeBlock(tile);
+                }
+            });
+
+            Geometry.circle(coreb.x, coreb.y, 5, (cx, cy) -> world.tile(cx, cy).clearOverlay());
+
+            world.endMapLoad();
+
+            zone.rules.get(state.rules);
+            state.rules.zone = zone;
+            for(Tile core : state.teams.get(defaultTeam).cores){
+                for(ItemStack stack : zone.getStartingItems()){
+                    core.entity.items.add(stack.item, stack.amount);
+                }
+            }
+            Tile core = state.teams.get(defaultTeam).cores.first();
+            core.entity.items.clear();
+
+            logic.play();
+            state.rules.waveTimer = false;
+            state.rules.waveSpacing = 60f * 30;
+            state.rules.buildCostMultiplier = 0.3f;
+            state.rules.tutorial = true;
+            Events.fire(Trigger.newGame);
         });
     }
 
@@ -231,7 +328,9 @@ public class Control implements ApplicationListener{
     @Override
     public void dispose(){
         content.dispose();
-        Net.dispose();
+        net.dispose();
+        Musics.dispose();
+        Sounds.dispose();
         ui.editor.dispose();
     }
 
@@ -250,34 +349,85 @@ public class Control implements ApplicationListener{
 
     @Override
     public void init(){
-        Platform.instance.updateRPC();
+        platform.updateRPC();
 
-        if(!Core.settings.getBool("4.0-warning-2", false)){
+        //play tutorial on stop
+        if(!settings.getBool("playedtutorial", false)){
+            Core.app.post(() -> Core.app.post(this::playTutorial));
+        }
 
-            Time.run(5f, () -> {
-                FloatingDialog dialog = new FloatingDialog("VERY IMPORTANT");
-                dialog.buttons.addButton("$ok", () -> {
+        //display UI scale changed dialog
+        if(Core.settings.getBool("uiscalechanged", false)){
+            Core.app.post(() -> Core.app.post(() -> {
+                FloatingDialog dialog = new FloatingDialog("$confirm");
+                dialog.setFillParent(true);
+
+                float[] countdown = {60 * 11};
+                Runnable exit = () -> {
+                    Core.settings.put("uiscale", 100);
+                    Core.settings.put("uiscalechanged", false);
+                    settings.save();
                     dialog.hide();
-                    Core.settings.put("4.0-warning-2", true);
-                    Core.settings.save();
-                }).size(100f, 60f);
-                dialog.cont.add("Reminder: The alpha version you are about to play is very unstable, and is [accent]not representative of the final v4 release.[]\n\n " +
-                "\nThere is currently[scarlet] no sound implemented[]; this is intentional.\n" +
-                "All current art and UI is unfinished, and will be changed before release. " +
-                "\n\n[accent]Saves may be corrupted without warning between updates.").wrap().width(400f);
+                    Core.app.exit();
+                };
+
+                dialog.cont.label(() -> {
+                    if(countdown[0] <= 0){
+                        exit.run();
+                    }
+                    return Core.bundle.format("uiscale.reset", (int)((countdown[0] -= Time.delta()) / 60f));
+                }).pad(10f).expand().center();
+
+                dialog.buttons.defaults().size(200f, 60f);
+                dialog.buttons.addButton("$uiscale.cancel", exit);
+
+                dialog.buttons.addButton("$ok", () -> {
+                    Core.settings.put("uiscalechanged", false);
+                    settings.save();
+                    dialog.hide();
+                });
+
                 dialog.show();
-            });
+            }));
+        }
+
+        if(android){
+            Sounds.empty.loop(0f, 1f, 0f);
         }
     }
 
     @Override
     public void update(){
+        //TODO find out why this happens on Android
+        if(assets == null) return;
+
         saves.update();
 
-        input.updateController();
+        //update and load any requested assets
+        try{
+            assets.update();
+        }catch(Exception ignored){
+        }
+
+        input.updateState();
 
         //autosave global data if it's modified
         data.checkSave();
+
+        music.update();
+        loops.update();
+        Time.updateGlobal();
+
+        if(Core.input.keyTap(Binding.fullscreen)){
+            boolean full = settings.getBool("fullscreen");
+            if(full){
+                graphics.setWindowedMode(graphics.getWidth(), graphics.getHeight());
+            }else{
+                graphics.setFullscreenMode(graphics.getDisplayMode());
+            }
+            settings.put("fullscreen", !full);
+            settings.save();
+        }
 
         if(!state.is(State.menu)){
             input.update();
@@ -285,19 +435,23 @@ public class Control implements ApplicationListener{
             if(world.isZone()){
                 for(Tile tile : state.teams.get(player.getTeam()).cores){
                     for(Item item : content.items()){
-                        if(tile.entity.items.has(item)){
+                        if(tile.entity != null && tile.entity.items.has(item)){
                             data.unlockContent(item);
                         }
                     }
                 }
             }
 
-            //auto-update rpc every 5 seconds
-            if(timer.get(0, 60 * 5)){
-                Platform.instance.updateRPC();
+            if(state.rules.tutorial){
+                tutorial.update();
             }
 
-            if(Core.input.keyTap(Binding.pause) && !ui.restart.isShown() && (state.is(State.paused) || state.is(State.playing))){
+            //auto-update rpc every 5 seconds
+            if(timer.get(0, 60 * 5)){
+                platform.updateRPC();
+            }
+
+            if(Core.input.keyTap(Binding.pause) && !scene.hasDialog() && !ui.restart.isShown() && (state.is(State.paused) || state.is(State.playing))){
                 state.set(state.is(State.playing) ? State.paused : State.playing);
             }
 
@@ -319,8 +473,8 @@ public class Control implements ApplicationListener{
                 Time.update();
             }
 
-            if(!scene.hasDialog() && !(scene.root.getChildren().peek() instanceof Dialog) && Core.input.keyTap(KeyCode.BACK)){
-                Platform.instance.hide();
+            if(!scene.hasDialog() && !scene.root.getChildren().isEmpty() && !(scene.root.getChildren().peek() instanceof Dialog) && Core.input.keyTap(KeyCode.BACK)){
+                platform.hide();
             }
         }
     }

@@ -1,45 +1,55 @@
 package io.anuke.mindustry.ui.dialogs;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.collection.ObjectSet;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.Lines;
-import io.anuke.arc.math.Interpolation;
-import io.anuke.arc.scene.Element;
-import io.anuke.arc.scene.Group;
-import io.anuke.arc.scene.actions.Actions;
-import io.anuke.arc.scene.actions.RelativeTemporalAction;
-import io.anuke.arc.scene.event.Touchable;
-import io.anuke.arc.scene.style.TextureRegionDrawable;
-import io.anuke.arc.scene.ui.ImageButton;
-import io.anuke.arc.scene.ui.layout.Table;
-import io.anuke.arc.scene.ui.layout.Unit;
-import io.anuke.arc.util.Align;
-import io.anuke.mindustry.content.TechTree;
-import io.anuke.mindustry.content.TechTree.TechNode;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.type.ItemStack;
-import io.anuke.mindustry.ui.ItemsDisplay;
-import io.anuke.mindustry.ui.TreeLayout;
-import io.anuke.mindustry.ui.TreeLayout.TreeNode;
-import io.anuke.mindustry.world.Block.Icon;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.input.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.scene.*;
+import io.anuke.arc.scene.actions.*;
+import io.anuke.arc.scene.event.*;
+import io.anuke.arc.scene.style.*;
+import io.anuke.arc.scene.ui.*;
+import io.anuke.arc.scene.ui.layout.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.content.TechTree.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.ui.*;
+import io.anuke.mindustry.ui.Cicon;
+import io.anuke.mindustry.ui.layout.*;
+import io.anuke.mindustry.ui.layout.TreeLayout.*;
 
 import static io.anuke.mindustry.Vars.*;
 
 public class TechTreeDialog extends FloatingDialog{
-    private final float nodeSize = Unit.dp.scl(60f);
+    private final float nodeSize = Scl.scl(60f);
     private ObjectSet<TechTreeNode> nodes = new ObjectSet<>();
     private TechTreeNode root = new TechTreeNode(TechTree.root, null);
+    private Rectangle bounds = new Rectangle();
     private ItemsDisplay items;
+    private View view;
 
     public TechTreeDialog(){
         super("");
 
         titleTable.remove();
         margin(0f).marginBottom(8);
-        cont.stack(new View(), items = new ItemsDisplay()).grow();
+        Stack stack = cont.stack(view = new View(), items = new ItemsDisplay()).grow().get();
+
+        Events.on(ContentReloadEvent.class, e -> {
+            nodes.clear();
+            root = new TechTreeNode(TechTree.root, null);
+            checkNodes(root);
+            treeLayout();
+            stack.getChildren().get(0).remove();
+            stack.addChildAt(0, view = new View());
+        });
 
         shown(() -> {
             checkNodes(root);
@@ -50,24 +60,71 @@ public class TechTreeDialog extends FloatingDialog{
 
         addCloseButton();
 
-        buttons.addImageTextButton("$database", "icon-database", 14 * 2, () -> {
+        buttons.addImageTextButton("$database", Icon.database, () -> {
             hide();
             ui.database.show();
         }).size(210f, 64f);
-    }
 
-    @Override
-    protected void drawBackground(float x, float y){
-        drawDefaultBackground(x, y);
+        //scaling/drag input
+        addListener(new InputListener(){
+            @Override
+            public boolean scrolled(InputEvent event, float x, float y, float amountX, float amountY){
+                view.setScale(Mathf.clamp(view.getScaleX() - amountY / 40f, 0.25f, 1f));
+                view.setOrigin(Align.center);
+                view.setTransform(true);
+                return true;
+            }
+
+            @Override
+            public boolean mouseMoved(InputEvent event, float x, float y){
+                view.requestScroll();
+                return super.mouseMoved(event, x, y);
+            }
+        });
+
+        addListener(new ElementGestureListener(){
+            @Override
+            public void zoom(InputEvent event, float initialDistance, float distance){
+                if(view.lastZoom < 0){
+                    view.lastZoom = view.getScaleX();
+                }
+
+                view.setScale(Mathf.clamp(distance / initialDistance * view.lastZoom, 0.25f, 1f));
+                view.setOrigin(Align.center);
+                view.setTransform(true);
+            }
+
+            @Override
+            public void touchUp(InputEvent event, float x, float y, int pointer, KeyCode button){
+                view.lastZoom = view.getScaleX();
+            }
+
+            @Override
+            public void pan(InputEvent event, float x, float y, float deltaX, float deltaY){
+                view.panX += deltaX / view.getScaleX();
+                view.panY += deltaY / view.getScaleY();
+                view.moved = true;
+                view.clamp();
+            }
+        });
     }
 
     void treeLayout(){
-        TreeLayout layout = new TreeLayout();
-        layout.gapBetweenLevels = Unit.dp.scl(60f);
-        layout.gapBetweenNodes = Unit.dp.scl(40f);
+        RadialTreeLayout layout = new RadialTreeLayout();
         LayoutNode node = new LayoutNode(root, null);
         layout.layout(node);
+        float minx = 0f, miny = 0f, maxx = 0f, maxy = 0f;
         copyInfo(node);
+
+        for(TechTreeNode n : nodes){
+            if(!n.visible) continue;
+            minx = Math.min(n.x - n.width/2f, minx);
+            maxx = Math.max(n.x + n.width/2f, maxx);
+            miny = Math.min(n.y - n.height/2f, miny);
+            maxy = Math.max(n.y + n.height/2f, maxy);
+        }
+        bounds = new Rectangle(minx, miny, maxx - minx, maxy - miny);
+        bounds.y += nodeSize*1.5f;
     }
 
     void copyInfo(LayoutNode node){
@@ -115,7 +172,7 @@ public class TechTreeDialog extends FloatingDialog{
             this.parent = parent;
             this.width = this.height = nodeSize;
             if(node.children != null){
-                children = Array.with(node.children).select(n -> n.visible).map(t -> new LayoutNode(t, this)).toArray(LayoutNode.class);
+                children = Array.with(node.children).map(t -> new LayoutNode(t, this)).toArray(LayoutNode.class);
             }
         }
     }
@@ -139,7 +196,7 @@ public class TechTreeDialog extends FloatingDialog{
     }
 
     class View extends Group{
-        float panX = 0, panY = -200;
+        float panX = 0, panY = -200, lastZoom = -1;
         boolean moved = false;
         ImageButton hoverNode;
         Table infoTable = new Table();
@@ -148,9 +205,11 @@ public class TechTreeDialog extends FloatingDialog{
             infoTable.touchable(Touchable.enabled);
 
             for(TechTreeNode node : nodes){
-                ImageButton button = new ImageButton(node.node.block.icon(Icon.medium), "node");
+                ImageButton button = new ImageButton(node.node.block.icon(Cicon.medium), Styles.nodei);
                 button.visible(() -> node.visible);
                 button.clicked(() -> {
+                    if(moved) return;
+
                     if(mobile){
                         hoverNode = button;
                         rebuild();
@@ -187,15 +246,14 @@ public class TechTreeDialog extends FloatingDialog{
                 });
                 button.touchable(() -> !node.visible ? Touchable.disabled : Touchable.enabled);
                 button.setUserObject(node.node);
-                button.tapped(() -> moved = false);
                 button.setSize(nodeSize);
                 button.update(() -> {
                     float offset = (Core.graphics.getHeight() % 2) / 2f;
                     button.setPosition(node.x + panX + width / 2f, node.y + panY + height / 2f + offset, Align.center);
-                    button.getStyle().up = Core.scene.skin.getDrawable(!locked(node.node) ? "content-background" : !data.hasItems(node.node.requirements) ? "content-background-noitems" : "content-background-locked");
+                    button.getStyle().up = !locked(node.node) ? Tex.buttonOver : !data.hasItems(node.node.requirements) ? Tex.buttonRed : Tex.button;
                     ((TextureRegionDrawable)button.getStyle().imageUp)
-                    .setRegion(node.visible ? node.node.block.icon(Icon.medium) : Core.atlas.find("icon-tree-locked"));
-                    button.getImage().setColor(!locked(node.node) ? Color.WHITE : Color.GRAY);
+                    .setRegion(node.visible ? node.node.block.icon(Cicon.medium) : Core.atlas.find("icon-locked"));
+                    button.getImage().setColor(!locked(node.node) ? Color.white : Color.gray);
                 });
                 addChild(button);
             }
@@ -210,11 +268,21 @@ public class TechTreeDialog extends FloatingDialog{
                 });
             }
 
-            dragged((x, y) -> {
-                moved = true;
-                panX += x;
-                panY += y;
-            });
+            setOrigin(Align.center);
+            setTransform(true);
+            released(() -> moved = false);
+        }
+
+        void clamp(){
+            float pad = nodeSize;
+
+            float ox = width/2f, oy = height/2f;
+            float rx = bounds.x + panX + ox, ry = panY + oy + bounds.y;
+            float rw = bounds.width, rh = bounds.height;
+            rx = Mathf.clamp(rx, -rw + pad, Core.graphics.getWidth() - pad);
+            ry = Mathf.clamp(ry, -rh + pad, Core.graphics.getHeight() - pad);
+            panX = rx - bounds.x - ox;
+            panY = ry - bounds.y - oy;
         }
 
         void unlock(TechNode node){
@@ -226,6 +294,8 @@ public class TechTreeDialog extends FloatingDialog{
             treeLayout();
             rebuild();
             Core.scene.act();
+            Sounds.unlock.play();
+            Events.fire(new ResearchEvent(node.block));
         }
 
         void rebuild(){
@@ -246,42 +316,49 @@ public class TechTreeDialog extends FloatingDialog{
                 }
             });
 
-            infoTable.background("content-background");
             infoTable.update(() -> infoTable.setPosition(button.getX() + button.getWidth(), button.getY() + button.getHeight(), Align.topLeft));
 
-            infoTable.margin(0).left().defaults().left();
+            infoTable.left();
+            infoTable.background(Tex.button).margin(8f);
 
-            infoTable.addImageButton("icon-info", "node", 14 * 2, () -> ui.content.show(node.block)).growY().width(50f);
+            infoTable.table(b -> {
+                b.margin(0).left().defaults().left();
 
-            infoTable.add().grow();
+                b.addImageButton(Icon.infoSmall, Styles.cleari, () -> ui.content.show(node.block)).growY().width(50f);
+                b.add().grow();
+                b.table(desc -> {
+                    desc.left().defaults().left();
+                    desc.add(node.block.localizedName);
+                    desc.row();
+                    if(locked(node)){
+                        desc.table(t -> {
+                            t.left();
+                            for(ItemStack req : node.requirements){
+                                t.table(list -> {
+                                    list.left();
+                                    list.addImage(req.item.icon(Cicon.small)).size(8 * 3).padRight(3);
+                                    list.add(req.item.localizedName()).color(Color.lightGray);
+                                    list.label(() -> " " + Math.min(data.getItem(req.item), req.amount) + " / " + req.amount)
+                                    .update(l -> l.setColor(data.has(req.item, req.amount) ? Color.lightGray : Color.scarlet));
+                                }).fillX().left();
+                                t.row();
+                            }
+                        });
+                    }else{
+                        desc.add("$completed");
+                    }
+                }).pad(9);
 
-            infoTable.table(desc -> {
-                desc.left().defaults().left();
-                desc.add(node.block.localizedName);
-                desc.row();
-                if(locked(node)){
-                    desc.table(t -> {
-                        t.left();
-                        for(ItemStack req : node.requirements){
-                            t.table(list -> {
-                                list.left();
-                                list.addImage(req.item.getContentIcon()).size(8 * 3).padRight(3);
-                                list.add(req.item.localizedName()).color(Color.LIGHT_GRAY);
-                                list.label(() -> " " + Math.min(data.getItem(req.item), req.amount) + " / " + req.amount)
-                                .update(l -> l.setColor(data.has(req.item, req.amount) ? Color.LIGHT_GRAY : Color.SCARLET));
-                            }).fillX().left();
-                            t.row();
-                        }
-                    });
-                }else{
-                    desc.add("$completed");
+                if(mobile && locked(node)){
+                    b.row();
+                    b.addImageTextButton("$research", Icon.checkSmall, Styles.nodet, () -> unlock(node))
+                    .disabled(i -> !data.hasItems(node.requirements)).growX().height(44f).colspan(3);
                 }
-            }).pad(9);
+            });
 
-            if(mobile && locked(node)){
-                infoTable.row();
-                infoTable.addImageTextButton("$research", "icon-check", "node", 16 * 2, () -> unlock(node))
-                .disabled(b -> !data.hasItems(node.requirements)).growX().height(44f).colspan(3);
+            infoTable.row();
+            if(node.block.description != null){
+                infoTable.table(t -> t.margin(3f).left().labelWrap(node.block.description).color(Color.lightGray).growX()).fillX();
             }
 
             addChild(infoTable);
@@ -290,21 +367,23 @@ public class TechTreeDialog extends FloatingDialog{
         }
 
         @Override
-        public void draw(){
-            float offsetX = panX + width / 2f + x, offsetY = panY + height / 2f + y;
+        public void drawChildren(){
+            clamp();
+            float offsetX = panX + width / 2f, offsetY = panY + height / 2f;
 
             for(TechTreeNode node : nodes){
                 if(!node.visible) continue;
                 for(TechTreeNode child : node.children){
                     if(!child.visible) continue;
 
-                    Lines.stroke(Unit.dp.scl(3f), locked(node.node) || locked(child.node) ? Pal.locked : Pal.accent);
+                    Lines.stroke(Scl.scl(4f), locked(node.node) || locked(child.node) ? Pal.gray : Pal.accent);
+                    Draw.alpha(parentAlpha);
                     Lines.line(node.x + offsetX, node.y + offsetY, child.x + offsetX, child.y + offsetY);
                 }
             }
 
             Draw.reset();
-            super.draw();
+            super.drawChildren();
         }
     }
 }

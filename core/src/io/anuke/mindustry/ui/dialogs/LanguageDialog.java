@@ -1,10 +1,12 @@
 package io.anuke.mindustry.ui.dialogs;
 
 import io.anuke.arc.Core;
+import io.anuke.arc.collection.*;
 import io.anuke.arc.scene.ui.*;
 import io.anuke.arc.scene.ui.layout.Table;
 import io.anuke.arc.util.Log;
 import io.anuke.arc.util.Strings;
+import io.anuke.mindustry.ui.*;
 
 import java.util.Locale;
 
@@ -13,6 +15,10 @@ import static io.anuke.mindustry.Vars.ui;
 
 public class LanguageDialog extends FloatingDialog{
     private Locale lastLocale;
+    private ObjectMap<Locale, String> displayNames = ObjectMap.of(
+        Locale.TRADITIONAL_CHINESE, "正體中文",
+        Locale.SIMPLIFIED_CHINESE, "简体中文"
+    );
 
     public LanguageDialog(){
         super("$settings.language");
@@ -29,7 +35,7 @@ public class LanguageDialog extends FloatingDialog{
         ButtonGroup<TextButton> group = new ButtonGroup<>();
 
         for(Locale loc : locales){
-            TextButton button = new TextButton(Strings.capitalize(loc.getDisplayName(loc)), "toggle");
+            TextButton button = new TextButton(Strings.capitalize(displayNames.get(loc, loc.getDisplayName(loc))), Styles.clearTogglet);
             button.clicked(() -> {
                 if(getLocale().equals(loc)) return;
                 Core.settings.put("locale", loc.toString());
@@ -37,7 +43,7 @@ public class LanguageDialog extends FloatingDialog{
                 Log.info("Setting locale: {0}", loc.toString());
                 ui.showInfo("$language.restart");
             });
-            langs.add(button).group(group).update(t -> t.setChecked(loc.equals(getLocale()))).size(400f, 50f).pad(2).row();
+            langs.add(button).group(group).update(t -> t.setChecked(loc.equals(getLocale()))).size(400f, 50f).row();
         }
 
         cont.add(pane);

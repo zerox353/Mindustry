@@ -1,16 +1,17 @@
 package io.anuke.mindustry.world;
 
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.math.Mathf;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.func.*;
+import io.anuke.arc.math.*;
 import io.anuke.arc.math.geom.*;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.entities.traits.TargetTrait;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.world.blocks.BlockPart;
-import io.anuke.mindustry.world.blocks.Floor;
+import io.anuke.arc.util.ArcAnnotate.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.traits.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.world.blocks.*;
 import io.anuke.mindustry.world.modules.*;
 
 import static io.anuke.mindustry.Vars.*;
@@ -23,25 +24,24 @@ public class Tile implements Position, TargetTrait{
     public short x, y;
     protected Block block;
     protected Floor floor;
+    protected Floor overlay;
     /** Rotation, 0-3. Also used to store offload location, in which case it can be any number.*/
     protected byte rotation;
     /** Team ordinal. */
     protected byte team;
-    /** Ore that is on top of this (floor) block. */
-    protected short overlay = 0;
 
     public Tile(int x, int y){
         this.x = (short)x;
         this.y = (short)y;
-        block = floor = (Floor)Blocks.air;
+        block = floor = overlay = (Floor)Blocks.air;
     }
 
     public Tile(int x, int y, int floor, int overlay, int wall){
         this.x = (short)x;
         this.y = (short)y;
         this.floor = (Floor)content.block(floor);
+        this.overlay = (Floor)content.block(overlay);
         this.block = content.block(wall);
-        this.overlay = (short)overlay;
 
         //update entity and create it if needed
         changed();
@@ -50,6 +50,10 @@ public class Tile implements Position, TargetTrait{
     /** Returns this tile's position as a {@link Pos}. */
     public int pos(){
         return Pos.get(x, y);
+    }
+
+    public byte relativeTo(Tile tile){
+        return relativeTo(tile.x, tile.y);
     }
 
     /** Return relative rotation to a coordinate. Returns -1 if the coordinate is not near this tile. */
@@ -85,6 +89,15 @@ public class Tile implements Position, TargetTrait{
         return -1;
     }
 
+    /** Configure a tile with the current, local player. */
+    public void configure(int value){
+        Call.onTileConfig(player, this, value);
+    }
+
+    public void configureAny(int value){
+        Call.onTileConfig(null, this, value);
+    }
+
     @SuppressWarnings("unchecked")
     public <T extends TileEntity> T entity(){
         return (T)entity;
@@ -106,16 +119,20 @@ public class Tile implements Position, TargetTrait{
         return block().offset() + worldy();
     }
 
-    public Floor floor(){
+    public boolean isDarkened(){
+        return block().solid && !block().synthetic() && block().fillsTile;
+    }
+
+    public @NonNull Floor floor(){
         return floor;
     }
 
-    public Block block(){
+    public @NonNull Block block(){
         return block;
     }
 
-    public Floor overlay(){
-        return (Floor)content.block(overlay);
+    public @NonNull Floor overlay(){
+        return overlay;
     }
 
     @SuppressWarnings("unchecked")
@@ -136,7 +153,7 @@ public class Tile implements Position, TargetTrait{
         return team;
     }
 
-    public void setBlock(Block type, Team team, int rotation){
+    public void setBlock(@NonNull Block type, Team team, int rotation){
         preChanged();
         this.block = type;
         this.team = (byte)team.ordinal();
@@ -144,11 +161,12 @@ public class Tile implements Position, TargetTrait{
         changed();
     }
 
-    public void setBlock(Block type, Team team){
+    public void setBlock(@NonNull Block type, Team team){
         setBlock(type, team, 0);
     }
 
-    public void setBlock(Block type){
+    public void setBlock(@NonNull Block type){
+        if(type == null) throw new IllegalArgumentException("Block cannot be null.");
         preChanged();
         this.block = type;
         this.rotation = 0;
@@ -156,9 +174,16 @@ public class Tile implements Position, TargetTrait{
     }
 
     /**This resets the overlay!*/
-    public void setFloor(Floor type){
+    public void setFloor(@NonNull Floor type){
         this.floor = type;
-        this.overlay = 0;
+        this.overlay = (Floor)Blocks.air;
+    }
+
+    /** Sets the floor, preserving overlay.*/
+    public void setFloorUnder(@NonNull Floor floor){
+        Block overlay = this.overlay;
+        setFloor(floor);
+        setOverlay(overlay);
     }
 
     public byte rotation(){
@@ -170,7 +195,7 @@ public class Tile implements Position, TargetTrait{
     }
 
     public short overlayID(){
-        return overlay;
+        return overlay.id;
     }
 
     public short blockID(){
@@ -182,15 +207,15 @@ public class Tile implements Position, TargetTrait{
     }
 
     public void setOverlayID(short ore){
-        this.overlay = ore;
+        this.overlay = (Floor)content.block(ore);
     }
 
     public void setOverlay(Block block){
-        setOverlayID(block.id);
+        this.overlay = (Floor)block;
     }
 
     public void clearOverlay(){
-        this.overlay = 0;
+        setOverlayID((short)0);
     }
 
     public boolean passable(){
@@ -215,7 +240,7 @@ public class Tile implements Position, TargetTrait{
     }
 
     public boolean isEnemyCheat(){
-        return getTeam() == waveTeam && !state.rules.pvp;
+        return getTeam() == waveTeam && state.rules.enemyCheat;
     }
 
     public boolean isLinked(){
@@ -226,7 +251,7 @@ public class Tile implements Position, TargetTrait{
      * Returns the list of all tiles linked to this multiblock, or an empty array if it's not a multiblock.
      * This array contains all linked tiles, including this tile itself.
      */
-    public void getLinkedTiles(Consumer<Tile> cons){
+    public void getLinkedTiles(Cons<Tile> cons){
         if(block.isMultiblock()){
             int size = block.size;
             int offsetx = -(size - 1) / 2;
@@ -234,11 +259,11 @@ public class Tile implements Position, TargetTrait{
             for(int dx = 0; dx < size; dx++){
                 for(int dy = 0; dy < size; dy++){
                     Tile other = world.tile(x + dx + offsetx, y + dy + offsety);
-                    if(other != null) cons.accept(other);
+                    if(other != null) cons.get(other);
                 }
             }
         }else{
-            cons.accept(this);
+            cons.get(this);
         }
     }
 
@@ -273,20 +298,6 @@ public class Tile implements Position, TargetTrait{
         return tmpArray;
     }
 
-    /** Returns the block the multiblock is linked to, or null if it is not linked to any block.
-    public Tile getLinked(){
-        if(!isLinked()){
-            return null;
-        }else{
-            return world.tile(x + linkX(rotation), y + linkY(rotation));
-        }
-    }
-
-    public Tile target(){
-        Tile link = getLinked();
-        return link == null ? this : link;
-    }*/
-
     public Rectangle getHitbox(Rectangle rect){
         return rect.setSize(block().size * tilesize).setCenter(drawx(), drawy());
     }
@@ -315,16 +326,41 @@ public class Tile implements Position, TargetTrait{
         return null;
     }
 
+    public Tile getNearbyLink(int rotation){
+        if(rotation == 0) return world.ltile(x + 1, y);
+        if(rotation == 1) return world.ltile(x, y + 1);
+        if(rotation == 2) return world.ltile(x - 1, y);
+        if(rotation == 3) return world.ltile(x, y - 1);
+        return null;
+    }
+
+    // ▲ ▲ ▼ ▼ ◀ ▶ ◀ ▶ B A
+    public Tile front(){
+        return getNearbyLink((rotation + 4) % 4);
+    }
+
+    public Tile right(){
+        return getNearbyLink((rotation + 3) % 4);
+    }
+
+    public Tile back(){
+        return getNearbyLink((rotation + 2) % 4);
+    }
+
+    public Tile left(){
+        return getNearbyLink((rotation + 1) % 4);
+    }
+
     public Tile relativeNear(int rotation){
         return getNearby(Mathf.mod(this.rotation + rotation, 4));
     }
 
     public boolean interactable(Team team){
-        return getTeam() == Team.none || team == getTeam();
+        return getTeam() == Team.derelict || team == getTeam();
     }
 
     public Item drop(){
-        return overlay == 0 || ((Floor)content.block(overlay)).itemDrop == null ? floor.itemDrop : ((Floor)content.block(overlay)).itemDrop;
+        return overlay == Blocks.air || overlay.itemDrop == null ? floor.itemDrop : overlay.itemDrop;
     }
 
     public void updateOcclusion(){
@@ -352,7 +388,7 @@ public class Tile implements Position, TargetTrait{
 
         //+26
 
-        if(link().synthetic()){
+        if(link().synthetic() && link().solid()){
             cost += Mathf.clamp(link().block.health / 10f, 0, 20);
         }
 
@@ -451,6 +487,6 @@ public class Tile implements Position, TargetTrait{
 
     @Override
     public String toString(){
-        return floor.name + ":" + block.name + ":" + content.block(overlay) + "[" + x + "," + y + "] " + "entity=" + (entity == null ? "null" : (entity.getClass()));
+        return floor.name + ":" + block.name + ":" + overlay + "[" + x + "," + y + "] " + "entity=" + (entity == null ? "null" : (entity.getClass())) + ":" + getTeam();
     }
 }

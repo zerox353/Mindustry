@@ -30,11 +30,6 @@ public class ThermalGenerator extends PowerGenerator{
     }
 
     @Override
-    public void placed(Tile tile){
-        super.placed(tile);
-    }
-
-    @Override
     public void onProximityAdded(Tile tile){
         super.onProximityAdded(tile);
 
@@ -52,6 +47,6 @@ public class ThermalGenerator extends PowerGenerator{
     @Override
     public boolean canPlaceOn(Tile tile){
         //make sure there's heat at this location
-        return tile.getLinkedTilesAs(this, tempTiles).sum(other -> other.floor().attributes.get(Attribute.heat)) > 0.01f;
+        return tile.getLinkedTilesAs(this, tempTiles).sumf(other -> other.floor().attributes.get(Attribute.heat)) > 0.01f;
     }
 }

@@ -1,9 +1,11 @@
 package io.anuke.mindustry.game;
 
-import io.anuke.annotations.Annotations.Serialize;
-import io.anuke.arc.collection.Array;
-import io.anuke.mindustry.io.JsonIO;
-import io.anuke.mindustry.type.Zone;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.collection.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.io.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.world.*;
 
 /**
  * Defines current rules on how the game should function.
@@ -22,7 +24,7 @@ public class Rules{
     /** Whether the game objective is PvP. Note that this enables automatic hosting. */
     public boolean pvp;
     /** Whether enemy units drop random items on death. */
-    public boolean unitDrops;
+    public boolean unitDrops = true;
     /** How fast unit pads build units. */
     public float unitBuildSpeedMultiplier = 1f;
     /** How much health units start with. */
@@ -40,7 +42,7 @@ public class Rules{
     /** No-build zone around enemy core radius. */
     public float enemyCoreBuildRadius = 400f;
     /** Radius around enemy wave drop zones.*/
-    public float dropZoneRadius = 380f;
+    public float dropZoneRadius = 300f;
     /** Player respawn time in ticks. */
     public float respawnTime = 60 * 4;
     /** Time between waves in ticks. */
@@ -51,8 +53,8 @@ public class Rules{
     public float launchWaveMultiplier = 2f;
     /** Zone for saves that have them.*/
     public Zone zone;
-    /** Spawn layout. Should be assigned on save load based on map or zone. */
-    public Array<SpawnGroup> spawns = DefaultWaves.get();
+    /** Spawn layout. */
+    public Array<SpawnGroup> spawns = new Array<>();
     /** Determines if there should be limited respawns. */
     public boolean limitedRespawns = false;
     /** How many times player can respawn during one wave. */
@@ -63,9 +65,20 @@ public class Rules{
     public boolean attackMode = false;
     /** Whether this is the editor gamemode. */
     public boolean editor = false;
+    /** Whether the tutorial is enabled. False by default.*/
+    public boolean tutorial = false;
+    /** Starting items put in cores */
+    public Array<ItemStack> loadout = Array.with(ItemStack.with(Items.copper, 100));
+    /** Blocks that cannot be placed. */
+    public ObjectSet<Block> bannedBlocks = new ObjectSet<>();
 
     /** Copies this ruleset exactly. Not very efficient at all, do not use often. */
     public Rules copy(){
-        return JsonIO.read(Rules.class, JsonIO.write(this));
+        return JsonIO.copy(this);
+    }
+
+    /** Returns the gamemode that best fits these rules.*/
+    public Gamemode mode(){
+        return Gamemode.bestFit(this);
     }
 }

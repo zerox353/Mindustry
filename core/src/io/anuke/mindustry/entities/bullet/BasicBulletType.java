@@ -4,6 +4,7 @@ import io.anuke.arc.Core;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.graphics.g2d.Draw;
 import io.anuke.arc.graphics.g2d.TextureRegion;
+import io.anuke.mindustry.entities.type.Bullet;
 import io.anuke.mindustry.graphics.Pal;
 
 /** An extended BulletType for most ammo-based bullets shot from turrets and units. */
@@ -19,6 +20,11 @@ public class BasicBulletType extends BulletType{
     public BasicBulletType(float speed, float damage, String bulletSprite){
         super(speed, damage);
         this.bulletSprite = bulletSprite;
+    }
+
+    /** For mods. */
+    public BasicBulletType(){
+        this(1f, 1f, "bullet");
     }
 
     @Override

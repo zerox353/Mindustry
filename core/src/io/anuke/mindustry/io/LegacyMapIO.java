@@ -1,25 +1,21 @@
 package io.anuke.mindustry.io;
 
 import io.anuke.arc.collection.*;
-import io.anuke.arc.files.FileHandle;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.graphics.Pixmap;
-import io.anuke.arc.util.Pack;
-import io.anuke.arc.util.Structs;
-import io.anuke.arc.util.serialization.Json;
-import io.anuke.mindustry.content.Blocks;
-import io.anuke.mindustry.game.SpawnGroup;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.io.MapIO.TileProvider;
-import io.anuke.mindustry.maps.Map;
-import io.anuke.mindustry.type.ContentType;
+import io.anuke.arc.files.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.util.*;
+import io.anuke.arc.util.serialization.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.io.MapIO.*;
+import io.anuke.mindustry.maps.*;
+import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.world.*;
-import io.anuke.mindustry.world.LegacyColorMapper.LegacyBlock;
-import io.anuke.mindustry.world.blocks.BlockPart;
-import io.anuke.mindustry.world.blocks.Floor;
+import io.anuke.mindustry.world.LegacyColorMapper.*;
+import io.anuke.mindustry.world.blocks.*;
 
 import java.io.*;
-import java.util.zip.InflaterInputStream;
+import java.util.zip.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -40,6 +36,8 @@ public class LegacyMapIO{
         for(int x = 0; x < map.width; x++){
             for(int y = 0; y < map.height; y++){
                 tiles[x][y] = new CachedTile();
+                tiles[x][y].x = (short)x;
+                tiles[x][y].y = (short)y;
             }
         }
         state.rules.spawns = groups;
@@ -53,6 +51,9 @@ public class LegacyMapIO{
 
             //meta is uncompressed
             int version = stream.readInt();
+            if(version != 1){
+                throw new IOException("Outdated legacy map format");
+            }
             int build = stream.readInt();
             short width = stream.readShort(), height = stream.readShort();
             byte tagAmount = stream.readByte();
@@ -202,24 +203,10 @@ public class LegacyMapIO{
                 if(block.ore != null) tile.setOverlay(block.ore);
 
                 //place core
-                if(color == Color.rgba8888(Color.GREEN)){
-                    for(int dx = 0; dx < 3; dx++){
-                        for(int dy = 0; dy < 3; dy++){
-                            int worldx = dx - 1 + x;
-                            int worldy = dy - 1 + y;
-
-                            //multiblock parts
-                            if(Structs.inBounds(worldx, worldy, pixmap.getWidth(), pixmap.getHeight())){
-                                Tile write = tiles[worldx][worldy];
-                                write.setBlock(BlockPart.get(dx - 1, dy - 1));
-                                write.setTeam(Team.blue);
-                            }
-                        }
-                    }
-
+                if(color == Color.rgba8888(Color.green)){
                     //actual core parts
                     tile.setBlock(Blocks.coreShard);
-                    tile.setTeam(Team.blue);
+                    tile.setTeam(Team.sharded);
                 }
             }
         }

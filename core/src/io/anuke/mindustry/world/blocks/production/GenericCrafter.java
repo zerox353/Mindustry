@@ -1,21 +1,18 @@
 package io.anuke.mindustry.world.blocks.production;
 
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.function.Supplier;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Effects.Effect;
-import io.anuke.mindustry.entities.type.TileEntity;
+import io.anuke.arc.func.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.Effects.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.gen.*;
 import io.anuke.mindustry.type.*;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.consumers.ConsumeLiquidBase;
-import io.anuke.mindustry.world.consumers.ConsumeType;
-import io.anuke.mindustry.world.meta.BlockStat;
-import io.anuke.mindustry.world.meta.StatUnit;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.consumers.*;
+import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
 
@@ -28,8 +25,8 @@ public class GenericCrafter extends Block{
     protected Effect updateEffect = Fx.none;
     protected float updateEffectChance = 0.04f;
 
-    protected Consumer<Tile> drawer = null;
-    protected Supplier<TextureRegion[]> drawIcons = null;
+    protected Cons<Tile> drawer = null;
+    protected Prov<TextureRegion[]> drawIcons = null;
 
     public GenericCrafter(String name){
         super(name);
@@ -37,6 +34,8 @@ public class GenericCrafter extends Block{
         solid = true;
         hasItems = true;
         health = 60;
+        idleSound = Sounds.machine;
+        idleSoundVolume = 0.03f;
     }
 
     @Override
@@ -59,6 +58,11 @@ public class GenericCrafter extends Block{
     }
 
     @Override
+    public boolean shouldIdleSound(Tile tile){
+        return tile.entity.cons.valid();
+    }
+
+    @Override
     public void init(){
         outputsLiquid = outputLiquid != null;
         super.init();
@@ -69,7 +73,7 @@ public class GenericCrafter extends Block{
         if(drawer == null){
             super.draw(tile);
         }else{
-            drawer.accept(tile);
+            drawer.get(tile);
         }
     }
 
@@ -124,7 +128,14 @@ public class GenericCrafter extends Block{
     }
 
     @Override
-    public boolean canProduce(Tile tile){
+    public boolean outputsItems(){
+        return outputItem != null;
+    }
+
+
+
+    @Override
+    public boolean shouldConsume(Tile tile){
         if(outputItem != null && tile.entity.items.get(outputItem.item) >= itemCapacity){
             return false;
         }

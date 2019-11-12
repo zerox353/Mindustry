@@ -1,26 +1,22 @@
 package io.anuke.mindustry.entities;
 
-import io.anuke.annotations.Annotations.Struct;
-import io.anuke.arc.collection.GridBits;
-import io.anuke.arc.collection.IntQueue;
-import io.anuke.arc.function.Consumer;
-import io.anuke.arc.function.Predicate;
-import io.anuke.arc.graphics.Color;
-import io.anuke.arc.math.Mathf;
+import io.anuke.annotations.Annotations.*;
+import io.anuke.arc.*;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.func.*;
+import io.anuke.arc.graphics.*;
+import io.anuke.arc.math.*;
 import io.anuke.arc.math.geom.*;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.content.Bullets;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects.Effect;
-import io.anuke.mindustry.entities.bullet.Bullet;
-import io.anuke.mindustry.entities.effect.Fire;
-import io.anuke.mindustry.entities.effect.Lightning;
-import io.anuke.mindustry.entities.type.Unit;
-import io.anuke.mindustry.game.Team;
-import io.anuke.mindustry.gen.Call;
-import io.anuke.mindustry.gen.PropCell;
-import io.anuke.mindustry.graphics.Pal;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.Effects.*;
+import io.anuke.mindustry.entities.effect.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.game.EventType.*;
+import io.anuke.mindustry.game.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.world.*;
 
 import static io.anuke.mindustry.Vars.*;
 
@@ -31,12 +27,13 @@ public class Damage{
     private static Vector2 tr = new Vector2();
     private static GridBits bits = new GridBits(30, 30);
     private static IntQueue propagation = new IntQueue();
+    private static IntSet collidedBlocks = new IntSet();
 
     /** Creates a dynamic explosion based on specified parameters. */
     public static void dynamicExplosion(float x, float y, float flammability, float explosiveness, float power, float radius, Color color){
         for(int i = 0; i < Mathf.clamp(power / 20, 0, 6); i++){
             int branches = 5 + Mathf.clamp((int)(power / 30), 1, 20);
-            Time.run(i * 2f + Mathf.random(4f), () -> Lightning.create(Team.none, Pal.power, 3,
+            Time.run(i * 2f + Mathf.random(4f), () -> Lightning.create(Team.derelict, Pal.power, 3,
             x, y, Mathf.random(360f), branches + Mathf.range(2)));
         }
 
@@ -78,17 +75,32 @@ public class Damage{
         }
     }
 
+    public static void collideLine(Bullet hitter, Team team, Effect effect, float x, float y, float angle, float length){
+        collideLine(hitter, team, effect, x, y, angle, length, false);
+    }
+
     /**
      * Damages entities in a line.
      * Only enemies of the specified team are damaged.
      */
-    public static void collideLine(Bullet hitter, Team team, Effect effect, float x, float y, float angle, float length){
+    public static void collideLine(Bullet hitter, Team team, Effect effect, float x, float y, float angle, float length, boolean large){
+        collidedBlocks.clear();
         tr.trns(angle, length);
-        world.raycastEachWorld(x, y, x + tr.x, y + tr.y, (cx, cy) -> {
+        Intc2 collider = (cx, cy) -> {
             Tile tile = world.ltile(cx, cy);
-            if(tile != null && tile.entity != null && tile.getTeamID() != team.ordinal() && tile.entity.collide(hitter)){
+            if(tile != null && !collidedBlocks.contains(tile.pos()) && tile.entity != null && tile.getTeamID() != team.ordinal() && tile.entity.collide(hitter)){
                 tile.entity.collision(hitter);
+                collidedBlocks.add(tile.pos());
                 hitter.getBulletType().hit(hitter, tile.worldx(), tile.worldy());
+            }
+        };
+
+        world.raycastEachWorld(x, y, x + tr.x, y + tr.y, (cx, cy) -> {
+            collider.get(cx, cy);
+            if(large){
+                for(Point2 p : Geometry.d4){
+                    collider.get(cx + p.x, cy + p.y);
+                }
             }
             return false;
         });
@@ -113,7 +125,7 @@ public class Damage{
         rect.width += expand * 2;
         rect.height += expand * 2;
 
-        Consumer<Unit> cons = e -> {
+        Cons<Unit> cons = e -> {
             e.hitbox(hitrect);
             Rectangle other = hitrect;
             other.y -= expand;
@@ -134,16 +146,16 @@ public class Damage{
     }
 
     /** Damages all entities and blocks in a radius that are enemies of the team. */
-    public static void damageUnits(Team team, float x, float y, float size, float damage, Predicate<Unit> predicate, Consumer<Unit> acceptor){
-        Consumer<Unit> cons = entity -> {
-            if(!predicate.test(entity)) return;
+    public static void damageUnits(Team team, float x, float y, float size, float damage, Boolf<Unit> predicate, Cons<Unit> acceptor){
+        Cons<Unit> cons = entity -> {
+            if(!predicate.get(entity)) return;
 
             entity.hitbox(hitrect);
             if(!hitrect.overlaps(rect)){
                 return;
             }
             entity.damage(damage);
-            acceptor.accept(entity);
+            acceptor.get(entity);
         };
 
         rect.setSize(size * 2).setCenter(x, y);
@@ -166,7 +178,7 @@ public class Damage{
 
     /** Damages all entities and blocks in a radius that are enemies of the team. */
     public static void damage(Team team, float x, float y, float radius, float damage, boolean complete){
-        Consumer<Unit> cons = entity -> {
+        Cons<Unit> cons = entity -> {
             if(entity.getTeam() == team || entity.dst(x, y) > radius){
                 return;
             }
@@ -175,6 +187,10 @@ public class Damage{
             //TODO better velocity displacement
             float dst = tr.set(entity.x - x, entity.y - y).len();
             entity.velocity().add(tr.setLength((1f - dst / radius) * 2f / entity.mass()));
+
+            if(complete && damage >= 9999999f && entity == player){
+                Events.fire(Trigger.exclusionDeath);
+            }
         };
 
         rect.setSize(radius * 2).setCenter(x, y);

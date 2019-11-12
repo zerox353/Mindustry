@@ -2,22 +2,22 @@ package io.anuke.mindustry.type;
 
 import io.anuke.arc.collection.Array;
 import io.anuke.arc.collection.ObjectMap;
-import io.anuke.arc.function.Supplier;
+import io.anuke.arc.func.Prov;
 import io.anuke.arc.graphics.Color;
 import io.anuke.arc.math.Mathf;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.content.Fx;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.Effects.Effect;
 import io.anuke.mindustry.entities.type.Unit;
 import io.anuke.mindustry.entities.units.Statuses.StatusEntry;
-import io.anuke.mindustry.game.Content;
+import io.anuke.mindustry.ctype.Content;
 
 public class StatusEffect extends Content{
     public float damageMultiplier = 1f; //damage dealt
     public float armorMultiplier = 1f; //armor points
     public float speedMultiplier = 1f; //speed
-    public Color color = Color.WHITE.cpy(); //tint color
+    public Color color = Color.white.cpy(); //tint color
 
     /** Transition handler map. */
     private ObjectMap<StatusEffect, TransitionHandler> transitions = new ObjectMap<>();
@@ -36,7 +36,7 @@ public class StatusEffect extends Content{
     @Override
     public void init(){
         for(Object[] pair : transInit){
-            Supplier<StatusEffect> sup = (Supplier<StatusEffect>)pair[0];
+            Prov<StatusEffect> sup = (Prov<StatusEffect>)pair[0];
             TransitionHandler handler = (TransitionHandler)pair[1];
             transitions.put(sup.get(), handler);
         }
@@ -56,13 +56,13 @@ public class StatusEffect extends Content{
         }
     }
 
-    protected void trans(Supplier<StatusEffect> effect, TransitionHandler handler){
+    protected void trans(Prov<StatusEffect> effect, TransitionHandler handler){
         transInit.add(new Object[]{effect, handler});
     }
 
     @SuppressWarnings("unchecked")
-    protected void opposite(Supplier... effect){
-        for(Supplier<StatusEffect> sup : effect){
+    protected void opposite(Prov... effect){
+        for(Prov<StatusEffect> sup : effect){
             trans(sup, (unit, time, newTime, result) -> {
                 time -= newTime * 0.5f;
                 if(time > 0){

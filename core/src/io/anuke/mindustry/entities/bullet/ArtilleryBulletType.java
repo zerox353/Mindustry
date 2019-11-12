@@ -1,9 +1,11 @@
 package io.anuke.mindustry.entities.bullet;
 
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.mindustry.content.Fx;
-import io.anuke.mindustry.entities.Effects;
-import io.anuke.mindustry.entities.Effects.Effect;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.mindustry.content.*;
+import io.anuke.mindustry.entities.*;
+import io.anuke.mindustry.entities.Effects.*;
+import io.anuke.mindustry.entities.type.Bullet;
+import io.anuke.mindustry.gen.*;
 
 //TODO scale velocity depending on fslope()
 public class ArtilleryBulletType extends BasicBulletType{
@@ -15,10 +17,15 @@ public class ArtilleryBulletType extends BasicBulletType{
         collides = false;
         collidesAir = false;
         hitShake = 1f;
+        hitSound = Sounds.explosion;
+    }
+
+    public ArtilleryBulletType(){
+        this(1f, 1f, "shell");
     }
 
     @Override
-    public void update(Bullet b){
+    public void update(io.anuke.mindustry.entities.type.Bullet b){
         super.update(b);
 
         if(b.timer.get(0, 3 + b.fslope() * 2f)){

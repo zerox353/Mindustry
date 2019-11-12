@@ -5,13 +5,13 @@ import io.anuke.annotations.Annotations.WriteClass;
 import io.anuke.arc.graphics.Color;
 import io.anuke.mindustry.entities.Effects;
 import io.anuke.mindustry.entities.Effects.Effect;
-import io.anuke.mindustry.entities.Entities;
-import io.anuke.mindustry.entities.bullet.Bullet;
+import io.anuke.mindustry.entities.type.Bullet;
 import io.anuke.mindustry.entities.bullet.BulletType;
 import io.anuke.mindustry.entities.traits.BuilderTrait.BuildRequest;
 import io.anuke.mindustry.entities.traits.ShooterTrait;
 import io.anuke.mindustry.entities.type.*;
-import io.anuke.mindustry.game.Team;
+import io.anuke.mindustry.entities.units.*;
+import io.anuke.mindustry.game.*;
 import io.anuke.mindustry.net.Administration.TraceInfo;
 import io.anuke.mindustry.net.Packets.AdminAction;
 import io.anuke.mindustry.net.Packets.KickReason;
@@ -57,7 +57,7 @@ public class TypeIO{
         byte gid = buffer.get();
         if(gid == -1) return null;
         int id = buffer.getInt();
-        return (Unit)Entities.getGroup(gid).getByID(id);
+        return (Unit)entities.get(gid).getByID(id);
     }
 
     @WriteClass(ShooterTrait.class)
@@ -70,7 +70,7 @@ public class TypeIO{
     public static ShooterTrait readShooter(ByteBuffer buffer){
         byte gid = buffer.get();
         int id = buffer.getInt();
-        return (ShooterTrait)Entities.getGroup(gid).getByID(id);
+        return (ShooterTrait)entities.get(gid).getByID(id);
     }
 
     @WriteClass(Bullet.class)
@@ -86,15 +86,15 @@ public class TypeIO{
 
     @WriteClass(BaseUnit.class)
     public static void writeBaseUnit(ByteBuffer buffer, BaseUnit unit){
-        buffer.put((byte)unitGroups[unit.getTeam().ordinal()].getID());
+        buffer.put((byte)unit.getTeam().ordinal());
         buffer.putInt(unit.getID());
     }
 
     @ReadClass(BaseUnit.class)
-    public static BaseUnit writeBaseUnit(ByteBuffer buffer){
-        byte gid = buffer.get();
+    public static BaseUnit readBaseUnit(ByteBuffer buffer){
+        byte tid = buffer.get();
         int id = buffer.getInt();
-        return (BaseUnit)Entities.getGroup(gid).getByID(id);
+        return unitGroups[tid].getByID(id);
     }
 
     @WriteClass(Tile.class)
@@ -126,6 +126,8 @@ public class TypeIO{
             if(!request.breaking){
                 buffer.putShort(request.block.id);
                 buffer.put((byte)request.rotation);
+                buffer.put(request.hasConfig ? (byte)1 : 0);
+                buffer.putInt(request.config);
             }
         }
     }
@@ -139,12 +141,21 @@ public class TypeIO{
             int position = buffer.getInt();
             BuildRequest currentRequest;
 
+            if(world.tile(position) == null){
+                continue;
+            }
+
             if(type == 1){ //remove
                 currentRequest = new BuildRequest(Pos.x(position), Pos.y(position));
             }else{ //place
                 short block = buffer.getShort();
                 byte rotation = buffer.get();
+                boolean hasConfig = buffer.get() == 1;
+                int config = buffer.getInt();
                 currentRequest = new BuildRequest(Pos.x(position), Pos.y(position), rotation, content.block(block));
+                if(hasConfig){
+                    currentRequest.configure(config);
+                }
             }
 
             reqs[i] = (currentRequest);
@@ -163,6 +174,23 @@ public class TypeIO{
         return KickReason.values()[buffer.get()];
     }
 
+    @WriteClass(Rules.class)
+    public static void writeRules(ByteBuffer buffer, Rules rules){
+        String string = JsonIO.write(rules);
+        byte[] bytes = string.getBytes(charset);
+        buffer.putInt(bytes.length);
+        buffer.put(bytes);
+    }
+
+    @ReadClass(Rules.class)
+    public static Rules readRules(ByteBuffer buffer){
+        int length = buffer.getInt();
+        byte[] bytes = new byte[length];
+        buffer.get(bytes);
+        String string = new String(bytes, charset);
+        return JsonIO.read(Rules.class, string);
+    }
+
     @WriteClass(Team.class)
     public static void writeTeam(ByteBuffer buffer, Team reason){
         buffer.put((byte)reason.ordinal());
@@ -171,6 +199,16 @@ public class TypeIO{
     @ReadClass(Team.class)
     public static Team readTeam(ByteBuffer buffer){
         return Team.all[buffer.get()];
+    }
+
+    @WriteClass(UnitCommand.class)
+    public static void writeUnitCommand(ByteBuffer buffer, UnitCommand reason){
+        buffer.put((byte)reason.ordinal());
+    }
+
+    @ReadClass(UnitCommand.class)
+    public static UnitCommand readUnitCommand(ByteBuffer buffer){
+        return UnitCommand.all[buffer.get()];
     }
 
     @WriteClass(AdminAction.class)
@@ -191,6 +229,16 @@ public class TypeIO{
     @ReadClass(Effect.class)
     public static Effect readEffect(ByteBuffer buffer){
         return Effects.getEffect(buffer.getShort());
+    }
+
+    @WriteClass(UnitType.class)
+    public static void writeUnitType(ByteBuffer buffer, UnitType effect){
+        buffer.putShort(effect.id);
+    }
+
+    @ReadClass(UnitType.class)
+    public static UnitType readUnitType(ByteBuffer buffer){
+        return content.getByID(ContentType.unit, buffer.getShort());
     }
 
     @WriteClass(Color.class)
