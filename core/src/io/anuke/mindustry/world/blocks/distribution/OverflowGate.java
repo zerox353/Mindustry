@@ -26,6 +26,8 @@ public class OverflowGate extends Block{
         return true;
     }
 
+    //TODO
+    /*
     @Override
     public int removeStack(Tile tile, Item item, int amount){
         OverflowGateEntity entity = tile.entity();
@@ -34,7 +36,7 @@ public class OverflowGate extends Block{
             entity.lastItem = null;
         }
         return result;
-    }
+    }*/
 
     @Override
     public void update(Tile tile){

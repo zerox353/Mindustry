@@ -1,12 +1,12 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
-import io.anuke.arc.collection.Array;
-import io.anuke.arc.util.Time;
+import io.anuke.arc.collection.*;
+import io.anuke.arc.util.*;
 import io.anuke.mindustry.content.*;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.type.Item;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.type.*;
 import io.anuke.mindustry.world.*;
-import io.anuke.mindustry.world.meta.BlockGroup;
+import io.anuke.mindustry.world.meta.*;
 
 public class Router extends Block{
     protected float speed = 8f;
@@ -74,6 +74,7 @@ public class Router extends Block{
         return null;
     }
 
+    /*
     @Override
     public int removeStack(Tile tile, Item item, int amount){
         RouterEntity entity = tile.entity();
@@ -82,7 +83,7 @@ public class Router extends Block{
             entity.lastItem = null;
         }
         return result;
-    }
+    }*/
 
     @Override
     public TileEntity newEntity(){

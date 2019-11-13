@@ -36,7 +36,7 @@ public class MinerDrone extends BaseDrone implements MinerTrait{
             findItem();
 
             //core full of the target item, do nothing
-            if(targetItem != null && entity.block.acceptStack(targetItem, 1, entity.tile, MinerDrone.this) == 0){
+            if(targetItem != null && !entity.block.acceptItem(targetItem, entity.tile)){
                 MinerDrone.this.clearItem();
                 return;
             }
@@ -94,7 +94,7 @@ public class MinerDrone extends BaseDrone implements MinerTrait{
             TileEntity tile = (TileEntity)target;
 
             if(dst(target) < type.range){
-                if(tile.tile.block().acceptStack(item.item, item.amount, tile.tile, MinerDrone.this) > 0){
+                if(tile.tile.block().acceptItem(item.item,tile.tile)){
                     Call.transferItemTo(item.item, item.amount, x, y, tile.tile);
                 }
 

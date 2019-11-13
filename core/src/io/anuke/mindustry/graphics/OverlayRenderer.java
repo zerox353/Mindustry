@@ -147,7 +147,7 @@ public class OverlayRenderer{
             Draw.reset();
 
             Tile tile = world.ltileWorld(v.x, v.y);
-            if(tile != null && tile.interactable(player.getTeam()) && tile.block().acceptStack(player.item().item, player.item().amount, tile, player) > 0){
+            if(tile != null && tile.interactable(player.getTeam()) && tile.block().acceptItem(player.item().item, tile)){
                 Lines.stroke(3f, Pal.gray);
                 Lines.square(tile.drawx(), tile.drawy(), tile.block().size * tilesize / 2f + 3 + Mathf.absin(Time.time(), 5f, 1f));
                 Lines.stroke(1f, Pal.place);

@@ -17,6 +17,16 @@ import io.anuke.mindustry.world.blocks.distribution.Conveyor.*;
 
 import static io.anuke.mindustry.Vars.*;
 
+//things to fix:
+//1) animations are broken since items don't save their position in the conveyor when they were inputted
+//2) no saving
+//3) no loading
+//4) can't withdraw items
+//5) items aren't per conveyor (is this even possible?)
+//6) pretends to use overdriving when it actually doesn't
+//7) "overflow" to other conveyors doesn't work, as the positions of items can't be negative
+//8) rendering could be more efficient, and isn't sorted properly
+
 /**Stores one continuous line of conveyors with one input and one output.*/
 public class ConveyorLine{
     /**distance units per conveyor block*/

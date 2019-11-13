@@ -1,18 +1,13 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.entities.type.Unit;
-import io.anuke.mindustry.gen.BufferItem;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.DirectionalItemBuffer;
-import io.anuke.mindustry.world.Tile;
-import io.anuke.mindustry.world.meta.BlockGroup;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.gen.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.meta.*;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
+import java.io.*;
 
 import static io.anuke.mindustry.Vars.content;
 
@@ -27,11 +22,6 @@ public class Junction extends Block{
         instantTransfer = true;
         group = BlockGroup.transportation;
         unloadable = false;
-    }
-
-    @Override
-    public int acceptStack(Item item, int amount, Tile tile, Unit source){
-        return 0;
     }
 
     @Override

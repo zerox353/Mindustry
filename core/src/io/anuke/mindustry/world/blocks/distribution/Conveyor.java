@@ -1,24 +1,23 @@
 package io.anuke.mindustry.world.blocks.distribution;
 
-import io.anuke.arc.Core;
-import io.anuke.arc.graphics.g2d.Draw;
-import io.anuke.arc.graphics.g2d.TextureRegion;
-import io.anuke.arc.math.Mathf;
-import io.anuke.arc.math.geom.Geometry;
-import io.anuke.arc.util.Time;
-import io.anuke.mindustry.entities.type.TileEntity;
-import io.anuke.mindustry.entities.type.Unit;
-import io.anuke.mindustry.graphics.Layer;
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.world.Block;
-import io.anuke.mindustry.world.Tile;
+import io.anuke.arc.*;
+import io.anuke.arc.graphics.g2d.*;
+import io.anuke.arc.math.*;
+import io.anuke.arc.math.geom.*;
+import io.anuke.arc.util.*;
+import io.anuke.mindustry.entities.traits.BuilderTrait.*;
+import io.anuke.mindustry.entities.type.*;
+import io.anuke.mindustry.graphics.*;
+import io.anuke.mindustry.type.*;
+import io.anuke.mindustry.world.*;
+import io.anuke.mindustry.world.blocks.*;
 import io.anuke.mindustry.world.meta.*;
 
 import java.io.*;
 
 import static io.anuke.mindustry.Vars.tilesize;
 
-public class Conveyor extends Block{
+public class Conveyor extends Block implements Autotiler{
     private TextureRegion[][] regions = new TextureRegion[7][4];
     protected float speed = 0f;
 
@@ -56,9 +55,15 @@ public class Conveyor extends Block{
         ConveyorEntity entity = tile.entity();
         byte rotation = tile.rotation();
 
-        int frame = entity.clogHeat <= 0.5f ? (int) (((Time.time() * speed * 8f * entity.timeScale)) % 4) : 0;
+        int frame = entity.clogHeat <= 0.5f ? (int)(((Time.time() * speed * 8f * entity.timeScale)) % 4) : 0;
         Draw.rect(regions[Mathf.clamp(entity.blendbits, 0, regions.length - 1)][Mathf.clamp(frame, 0, regions[0].length - 1)], tile.drawx(), tile.drawy(),
-            tilesize * entity.blendsclx, tilesize * entity.blendscly,  rotation*90);
+        tilesize * entity.blendsclx, tilesize * entity.blendscly, rotation * 90);
+    }
+
+    @Override
+    public boolean shouldIdleSound(Tile tile){
+        ConveyorEntity entity = tile.entity();
+        return entity.clogHeat <= 0.5f ;
     }
 
     @Override
@@ -66,32 +71,25 @@ public class Conveyor extends Block{
         super.onProximityUpdate(tile);
 
         ConveyorEntity entity = tile.entity();
-        entity.blendbits = 0;
-        entity.blendsclx = entity.blendscly = 1;
-
-        if(blends(tile, 2) && blends(tile, 1) && blends(tile, 3)){
-            entity.blendbits = 3;
-        }else if(blends(tile, 1) && blends(tile, 3)){
-            entity.blendbits = 4;
-        }else if(blends(tile, 1) && blends(tile, 2)){
-            entity.blendbits = 2;
-        }else if(blends(tile, 3) && blends(tile, 2)){
-            entity.blendbits = 2;
-            entity.blendscly = -1;
-        }else if(blends(tile, 1)){
-            entity.blendbits = 1;
-            entity.blendscly = -1;
-        }else if(blends(tile, 3)){
-            entity.blendbits = 1;
-        }
+        int[] bits = buildBlending(tile, tile.rotation(), null, true);
+        entity.blendbits = bits[0];
+        entity.blendsclx = bits[1];
+        entity.blendscly = bits[2];
     }
 
-    private boolean blends(Tile tile, int direction){
-        Tile other = tile.getNearby(Mathf.mod(tile.rotation() - direction, 4));
-        if(other != null) other = other.link();
+    @Override
+    public void drawRequestRegion(BuildRequest req, Eachable<BuildRequest> list){
+        int[] bits = getTiling(req, list);
 
-        return other != null && other.block().outputsItems()
-        && ((tile.getNearby(tile.rotation()) == other) || (!other.block().rotate || other.getNearby(other.rotation()) == tile));
+        if(bits == null) return;
+
+        TextureRegion region = regions[bits[0]][0];
+        Draw.rect(region, req.drawx(), req.drawy(), region.getWidth() * bits[1] * Draw.scl * req.animScale, region.getHeight() * bits[2] * Draw.scl * req.animScale, req.rotation * 90);
+    }
+
+    @Override
+    public boolean blends(Tile tile, int rotation, int otherx, int othery, int otherrot, Block otherblock){
+        return otherblock.outputsItems() && lookingAt(tile, rotation, otherx, othery, otherrot, otherblock);
     }
 
     @Override
@@ -118,7 +116,6 @@ public class Conveyor extends Block{
         //find block of same type that this is facing, add if necessary and stop
         if(facing != null && facing.block() == this && facing.rotation() == tile.rotation()){
             facing.<ConveyorEntity>entity().line.addFirst(tile);
-            return;
         }
     }
 
