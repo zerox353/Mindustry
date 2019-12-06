@@ -14,8 +14,7 @@ import io.anuke.mindustry.ctype.UnlockableContent;
 import io.anuke.mindustry.type.Item;
 import io.anuke.mindustry.type.Liquid;
 import io.anuke.mindustry.world.consumers.Consumers;
-import io.anuke.mindustry.world.meta.BlockBars;
-import io.anuke.mindustry.world.meta.BlockStats;
+import io.anuke.mindustry.world.meta.*;
 
 public abstract class BlockStorage extends UnlockableContent{
     public boolean hasItems;
@@ -33,6 +32,7 @@ public abstract class BlockStorage extends UnlockableContent{
     public final BlockStats stats = new BlockStats();
     public final BlockBars bars = new BlockBars();
     public final Consumers consumes = new Consumers();
+    public final BlockRegions regions = new BlockRegions((Block)this);
 
     public BlockStorage(String name){
         super(name);

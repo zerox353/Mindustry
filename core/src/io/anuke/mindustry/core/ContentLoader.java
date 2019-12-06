@@ -135,7 +135,7 @@ public class ContentLoader{
                 if(color == 0) continue;
 
                 Block block = block(i);
-                Color.rgba8888ToColor(block.color, color);
+                Color.rgba8888ToColor(block.minimapColor, color);
             }
         }
         pixmap.dispose();

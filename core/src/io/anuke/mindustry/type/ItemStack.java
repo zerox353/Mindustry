@@ -27,6 +27,10 @@ public class ItemStack implements Comparable<ItemStack>{
         return other != null && other.item == item && other.amount == amount;
     }
 
+    public static ItemStack[] mult(Array<ItemStack> stacks, int amount){
+        return stacks.map(i -> new ItemStack(i.item, i.amount * amount)).toArray(ItemStack.class);
+    }
+
     public static ItemStack[] mult(ItemStack[] stacks, int amount){
         ItemStack[] copy = new ItemStack[stacks.length];
         for(int i = 0; i < copy.length; i++){

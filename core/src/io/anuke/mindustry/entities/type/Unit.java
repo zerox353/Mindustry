@@ -307,7 +307,7 @@ public abstract class Unit extends DestructibleEntity implements SaveTrait, Targ
             }
 
             if(onLiquid && velocity.len() > 0.4f && Mathf.chance((velocity.len() * floor.speedMultiplier) * 0.06f * Time.delta())){
-                Effects.effect(floor.walkEffect, floor.color, x, y);
+                Effects.effect(floor.walkEffect, floor.minimapColor, x, y);
             }
 
             if(onLiquid){
@@ -321,7 +321,7 @@ public abstract class Unit extends DestructibleEntity implements SaveTrait, Targ
             if(onLiquid && floor.drownTime > 0){
                 drownTime += Time.delta() * 1f / floor.drownTime;
                 if(Mathf.chance(Time.delta() * 0.05f)){
-                    Effects.effect(floor.drownUpdateEffect, floor.color, x, y);
+                    Effects.effect(floor.drownUpdateEffect, floor.minimapColor, x, y);
                 }
             }else{
                 drownTime = Mathf.lerpDelta(drownTime, 0f, 0.03f);

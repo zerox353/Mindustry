@@ -147,7 +147,7 @@ public class MapIO{
         if(wall.synthetic()){
             return team.intColor;
         }
-        return Color.rgba8888(wall.solid ? wall.color : ore == Blocks.air ? floor.color : ore.color);
+        return Color.rgba8888(wall.solid ? wall.minimapColor : ore == Blocks.air ? floor.minimapColor : ore.minimapColor);
     }
 
     interface TileProvider{

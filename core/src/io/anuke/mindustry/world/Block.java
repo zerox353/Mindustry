@@ -39,7 +39,10 @@ import static io.anuke.mindustry.Vars.*;
 
 public class Block extends BlockStorage{
     public static final int crackRegions = 8, maxCrackSize = 5;
+    protected static TextureRegion[][] cracks;
 
+    /** type of entity created when this block is initialized for a tile. */
+    public Prov<TileEntity> entityType = TileEntity::new;
     /** whether this block has a tile entity that updates */
     public boolean update;
     /** whether this block has health and can be destroyed */
@@ -98,11 +101,8 @@ public class Block extends BlockStorage{
     public boolean sync;
     /** Whether this block uses conveyor-type placement mode.*/
     public boolean conveyorPlacement;
-    /**
-     * The color of this block when displayed on the minimap or map preview.
-     * Do not set manually! This is overriden when loading for most blocks.
-     */
-    public Color color = new Color(0, 0, 0, 1);
+    /** The color of this block when displayed on the minimap or map preview. Do not change manually, will be overwritten. */
+    public Color minimapColor = new Color(0, 0, 0, 1);
     /** Whether units target this block. */
     public boolean targetable = true;
     /** Whether the overdrive core has any effect on this block. */
@@ -115,19 +115,17 @@ public class Block extends BlockStorage{
     public boolean hasShadow = true;
     /** Sounds made when this block breaks.*/
     public Sound breakSound = Sounds.boom;
-
     /** The sound that this block makes while active. One sound loop. Do not overuse.*/
     public Sound activeSound = Sounds.none;
     /** Active sound base volume. */
     public float activeSoundVolume = 0.5f;
-
     /** The sound that this block makes while idle. Uses one sound loop for all blocks.*/
     public Sound idleSound = Sounds.none;
     /** Idle sound base volume. */
     public float idleSoundVolume = 0.5f;
 
     /** Cost of constructing this block. */
-    public ItemStack[] requirements = {};
+    public Array<ItemStack> requirements = new Array<>(0);
     /** Category in place menu. */
     public Category category = Category.distribution;
     /** Cost of building this block; do not modify directly! */
@@ -138,19 +136,18 @@ public class Block extends BlockStorage{
     public float buildCostMultiplier = 1f;
     /** Whether this block has instant transfer.*/
     public boolean instantTransfer = false;
+    /** Whether this block is shown as unlocked in the build/unlock menu from the start. */
     public boolean alwaysUnlocked = false;
 
-    protected TextureRegion[] cacheRegions = {};
-    protected Array<String> cacheRegionStrings = new Array<>();
-    protected Prov<TileEntity> entityType = TileEntity::new;
+    //protected TextureRegion[] cacheRegions = {};
+    //protected Array<String> cacheRegionStrings = new Array<>();
 
-    protected Array<Tile> tempTiles = new Array<>();
-    protected TextureRegion[] generatedIcons;
-    protected TextureRegion[] variantRegions, editorVariantRegions;
-    protected TextureRegion region, editorIcon;
+    //protected TextureRegion[] generatedIcons;
+    //protected TextureRegion[] variantRegions, editorVariantRegions;
+    //protected TextureRegion region, editorIcon;
 
-    protected static TextureRegion[][] cracks;
-
+    /** Tiles for temporary operations. */
+    protected final Array<Tile> tempTiles = new Array<>();
     /** Dump timer ID.*/
     protected final int timerDump = timers++;
     /** How often to try dumping items in ticks, e.g. 5 = 12 times/sec*/
@@ -444,11 +441,6 @@ public class Block extends BlockStorage{
     public void load(){
         region = Core.atlas.find(name);
 
-        cacheRegions = new TextureRegion[cacheRegionStrings.size];
-        for(int i = 0; i < cacheRegions.length; i++){
-            cacheRegions[i] = Core.atlas.find(cacheRegionStrings.get(i));
-        }
-
         if(cracks == null || (cracks[0][0].getTexture() != null && cracks[0][0].getTexture().isDisposed())){
             cracks = new TextureRegion[maxCrackSize][crackRegions];
             for(int size = 1; size <= maxCrackSize; size++){
@@ -457,17 +449,6 @@ public class Block extends BlockStorage{
                 }
             }
         }
-    }
-
-    /** Adds a region by name to be loaded, with the final name "{name}-suffix". Returns an ID to looks this region up by in {@link #reg(int)}. */
-    protected int reg(String suffix){
-        cacheRegionStrings.add(name + suffix);
-        return cacheRegionStrings.size - 1;
-    }
-
-    /** Returns an internally cached region by ID. */
-    protected TextureRegion reg(int id){
-        return cacheRegions[id];
     }
 
     /** Called when the block is tapped. */
@@ -532,7 +513,7 @@ public class Block extends BlockStorage{
         stats.add(BlockStat.health, health, StatUnit.none);
         if(isBuildable()){
             stats.add(BlockStat.buildTime, buildCost / 60, StatUnit.seconds);
-            stats.add(BlockStat.buildCost, new ItemListValue(false, requirements));
+            stats.add(BlockStat.buildCost, new ItemListValue(false, requirements.toArray(ItemStack.class)));
         }
 
         consumes.display(stats);
@@ -765,7 +746,7 @@ public class Block extends BlockStorage{
 
         if(!synthetic()){
             PixmapRegion image = Core.atlas.getPixmap((AtlasRegion)icon(Cicon.full));
-            color.set(image.getPixel(image.width/2, image.height/2));
+            minimapColor.set(image.getPixel(image.width/2, image.height/2));
         }
 
         getGeneratedIcons();
@@ -915,10 +896,10 @@ public class Block extends BlockStorage{
     /** Sets up requirements. Use only this method to set up requirements. */
     protected void requirements(Category cat, BuildVisibility visible, ItemStack[] stacks){
         this.category = cat;
-        this.requirements = stacks;
+        this.requirements = new Array<>(stacks);
         this.buildVisibility = visible;
 
-        Arrays.sort(requirements, Structs.comparingInt(i -> i.item.id));
+        requirements.sort(i -> i.item.id);
     }
 
 }

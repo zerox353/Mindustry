@@ -1,10 +1,9 @@
 package io.anuke.mindustry.world.modules;
 
-import io.anuke.mindustry.type.Item;
-import io.anuke.mindustry.type.ItemStack;
+import io.anuke.mindustry.type.*;
 
 import java.io.*;
-import java.util.Arrays;
+import java.util.*;
 
 import static io.anuke.mindustry.Vars.content;
 
@@ -39,6 +38,13 @@ public class ItemModule extends BlockModule{
     }
 
     public boolean has(ItemStack[] stacks){
+        for(ItemStack stack : stacks){
+            if(!has(stack.item, stack.amount)) return false;
+        }
+        return true;
+    }
+
+    public boolean has(Iterable<ItemStack> stacks){
         for(ItemStack stack : stacks){
             if(!has(stack.item, stack.amount)) return false;
         }

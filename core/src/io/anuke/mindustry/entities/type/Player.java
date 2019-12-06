@@ -301,7 +301,7 @@ public class Player extends Unit implements BuilderMinerTrait, ShooterTrait{
 
         if(!mech.flying){
             if(floor.isLiquid){
-                Draw.color(Color.white, floor.color, 0.5f);
+                Draw.color(Color.white, floor.minimapColor, 0.5f);
             }
 
             float boostTrnsY = -boostHeat * 3f;
@@ -321,7 +321,7 @@ public class Player extends Unit implements BuilderMinerTrait, ShooterTrait{
         }
 
         if(floor.isLiquid){
-            Draw.color(Color.white, floor.color, drownTime);
+            Draw.color(Color.white, floor.minimapColor, drownTime);
         }else{
             Draw.color(Color.white);
         }
@@ -529,7 +529,7 @@ public class Player extends Unit implements BuilderMinerTrait, ShooterTrait{
                 if(mech.shake > 1f){
                     Effects.shake(mech.shake, mech.shake, this);
                 }
-                Effects.effect(Fx.unitLand, tile.floor().color, x, y, tile.floor().isLiquid ? 1f : 0.5f);
+                Effects.effect(Fx.unitLand, tile.floor().minimapColor, x, y, tile.floor().isLiquid ? 1f : 0.5f);
             }
             mech.onLand(this);
             achievedFlight = false;

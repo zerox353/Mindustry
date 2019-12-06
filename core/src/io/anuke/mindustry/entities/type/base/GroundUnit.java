@@ -134,7 +134,7 @@ public class GroundUnit extends BaseUnit{
         Floor floor = getFloorOn();
 
         if(floor.isLiquid){
-            Draw.color(Color.white, floor.color, 0.5f);
+            Draw.color(Color.white, floor.minimapColor, 0.5f);
         }
 
         for(int i : Mathf.signs){
@@ -145,7 +145,7 @@ public class GroundUnit extends BaseUnit{
         }
 
         if(floor.isLiquid){
-            Draw.color(Color.white, floor.color, drownTime * 0.4f);
+            Draw.color(Color.white, floor.minimapColor, drownTime * 0.4f);
         }else{
             Draw.color(Color.white);
         }
